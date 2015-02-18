@@ -43,7 +43,6 @@ BIN1=	auto_master \
 	protocols \
 	rc \
 	rc.bsdextended \
-	rc.conf.pcbsd \
 	rc.firewall \
 	rc.initdiskless \
 	rc.sendmail \
