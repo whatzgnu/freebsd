@@ -334,10 +334,6 @@ RetryFault:;
 	map_generation = fs.map->timestamp;
 
 	if (fs.entry->eflags & MAP_ENTRY_NOFAULT) {
-		if ((curthread->td_pflags & TDP_DEVMEMIO) != 0) {
-			vm_map_unlock_read(fs.map);
-			return (KERN_FAILURE);
-		}
 		panic("vm_fault: fault on nofault entry, addr: %lx",
 		    (u_long)vaddr);
 	}
@@ -362,11 +358,13 @@ RetryFault:;
 	    (fault_flags & (VM_FAULT_CHANGE_WIRING | VM_FAULT_DIRTY)) == 0 &&
 	    /* avoid calling vm_object_set_writeable_dirty() */
 	    ((prot & VM_PROT_WRITE) == 0 ||
-	    fs.first_object->type != OBJT_VNODE ||
+	    (fs.first_object->type != OBJT_VNODE &&
+	    (fs.first_object->flags & OBJ_TMPFS_NODE) == 0) ||
 	    (fs.first_object->flags & OBJ_MIGHTBEDIRTY) != 0)) {
 		VM_OBJECT_RLOCK(fs.first_object);
 		if ((prot & VM_PROT_WRITE) != 0 &&
-		    fs.first_object->type == OBJT_VNODE &&
+		    (fs.first_object->type == OBJT_VNODE ||
+		    (fs.first_object->flags & OBJ_TMPFS_NODE) != 0) &&
 		    (fs.first_object->flags & OBJ_MIGHTBEDIRTY) == 0)
 			goto fast_failed;
 		m = vm_page_lookup(fs.first_object, fs.first_pindex);

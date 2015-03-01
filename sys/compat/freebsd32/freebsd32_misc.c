@@ -3074,6 +3074,7 @@ freebsd32_procctl(struct thread *td, struct freebsd32_procctl_args *uap)
 
 	switch (uap->com) {
 	case PROC_SPROTECT:
+	case PROC_TRACE_CTL:
 		error = copyin(PTRIN(uap->data), &flags, sizeof(flags));
 		if (error != 0)
 			return (error);
@@ -3102,6 +3103,9 @@ freebsd32_procctl(struct thread *td, struct freebsd32_procctl_args *uap)
 			return (error);
 		data = &x.rk;
 		break;
+	case PROC_TRACE_STATUS:
+		data = &flags;
+		break;
 	default:
 		return (EINVAL);
 	}
@@ -3116,6 +3120,10 @@ freebsd32_procctl(struct thread *td, struct freebsd32_procctl_args *uap)
 		error1 = copyout(&x.rk, uap->data, sizeof(x.rk));
 		if (error == 0)
 			error = error1;
+		break;
+	case PROC_TRACE_STATUS:
+		if (error == 0)
+			error = copyout(&flags, uap->data, sizeof(flags));
 		break;
 	}
 	return (error);
@@ -3137,6 +3145,9 @@ freebsd32_fcntl(struct thread *td, struct freebsd32_fcntl_args *uap)
 	case F_GETLK:
 	case F_SETFD:
 	case F_SETFL:
+	case F_OGETLK:
+	case F_OSETLK:
+	case F_OSETLKW:
 		tmp = (unsigned int)(uap->arg);
 		break;
 	default:
