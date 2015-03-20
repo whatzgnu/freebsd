@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2004  The FreeBSD Project
+# Copyright (c) 2000-2015  The FreeBSD Project
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -117,7 +117,6 @@ esac
 if [ "$fastboot_enable" = "YES" ]; then
 	# List of rc.d scripts we will start before login
 	_rc_preload=`rcorder ${skip} ${skip_firstboot} /etc/rc.d/* $fastboot_rc_early 2>/dev/null`
-	_rc_delay=" $fastboot_rc_delay "
 
 	# Don't wait for devd to do init
 	export devd_flags="-n $devd_flags"
@@ -126,15 +125,15 @@ if [ "$fastboot_enable" = "YES" ]; then
 	for _rc_elem in $_rc_preload
 	do
 		# Do we have something to delay to later?
-		case "$_rc_delay" in
+		case " $fastboot_rc_delay " in
 			*" $_rc_elem "*)        continue ;;
 		esac
 
 		# Save list of what we have already run
-		_rc_elem_run="$_rc_elem_run $_rc_elem "
+		_rc_elem_run="$_rc_elem_run $_rc_elem"
 
 		# Have we already started this?
-		case "$_rc_elem_done" in
+		case " $_rc_elem_done " in
 			*" $_rc_elem "*)        continue ;;
 		esac
 
@@ -149,7 +148,10 @@ if [ "$fastboot_enable" = "YES" ]; then
 	done
 
 	# Start the delayed services after the login is up
-	(sleep $fastboot_delay ; nice /bin/sh /etc/rc.delay "$_rc_elem_run" "$_rc_network_up")&
+	(sleep $fastboot_delay ; \
+	 nice /bin/sh /etc/rc.delay \
+	 "$_rc_elem_run" \
+	 "$_rc_network_up") &
 
 	echo ''
 	date
