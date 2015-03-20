@@ -2087,7 +2087,7 @@ _echoonce()
 #      such as mountcritremote when the user has NFS mounts
 _enable_full_networking()
 {
-	run_rc_script /etc/rc.d/netif restart
+	run_rc_script /etc/rc.d/netif ${_boot}
 	run_rc_script /etc/rc.d/defaultroute ${_boot}
 	_rc_network_up="1" ; export _rc_network_up
 }

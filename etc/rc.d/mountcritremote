@@ -43,7 +43,6 @@ mountcritremote_start()
 		if [ "$fastboot_enable" = "YES" -a -z "$_rc_network_up" ] ; then
 			_enable_full_networking
 		fi
-
 		echo -n 'Mounting NFS file systems:'
 		mount -a -t nfs
 		echo '.'
@@ -65,12 +64,11 @@ mountcritremote_start()
 
 		[ "${fstype}" = "nfs" ] && continue
 
-		if [ "$fastboot_enable" = "YES" -a -z "$_rc_network_up" ] ; then
-			_enable_full_networking
-		fi
-
 		case "`mount -d -a -t ${fstype}`" in
 		*mount_${fstype}*)
+			if [ "$fastboot_enable" = "YES" -a -z "$_rc_network_up" ] ; then
+				_enable_full_networking
+			fi
 			echo -n "Mounting ${fsdecr} file systems:"
 			mount -a -t ${fstype}
 			echo '.'
