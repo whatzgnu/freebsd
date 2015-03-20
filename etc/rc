@@ -114,6 +114,48 @@ case ${local_startup} in
 *)	find_local_scripts_new ;;
 esac
 
+if [ "$fastboot_enable" = "YES" ]; then
+	# List of rc.d scripts we will start before login
+	_rc_preload=`rcorder ${skip} ${skip_firstboot} /etc/rc.d/* $fastboot_rc_early 2>/dev/null`
+	_rc_delay=" $fastboot_rc_delay "
+
+	# Don't wait for devd to do init
+	export devd_flags="-n $devd_flags"
+
+	# Run the early scripts now
+	for _rc_elem in $_rc_preload
+	do
+		# Do we have something to delay to later?
+		case "$_rc_delay" in
+			*" $_rc_elem "*)        continue ;;
+		esac
+
+		# Save list of what we have already run
+		_rc_elem_run="$_rc_elem_run $_rc_elem "
+
+		# Have we already started this?
+		case "$_rc_elem_done" in
+			*" $_rc_elem "*)        continue ;;
+		esac
+
+		# Skip full netif, run this in post
+		if [ "${_rc_elem}" = "/etc/rc.d/netif" ] ; then
+			/etc/rc.d/netif start lo0
+		elif [ "${_rc_elem}" = "/etc/rc.d/defaultroute" ] ; then
+			continue
+		else
+			run_rc_script ${_rc_elem} ${_boot}
+		fi
+	done
+
+	# Start the delayed services after the login is up
+	(sleep $fastboot_delay ; nice /bin/sh /etc/rc.delay "$_rc_elem_run" "$_rc_network_up")&
+
+	echo ''
+	date
+	exit 0
+fi
+
 # The firstboot sentinel might be on a newly mounted filesystem; look for it
 # again and unset skip_firstboot if we find it.
 if [ -e ${firstboot_sentinel} ]; then
