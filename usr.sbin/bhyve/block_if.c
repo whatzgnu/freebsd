@@ -59,7 +59,8 @@ __FBSDID("$FreeBSD$");
 enum blockop {
 	BOP_READ,
 	BOP_WRITE,
-	BOP_FLUSH
+	BOP_FLUSH,
+	BOP_DELETE
 };
 
 enum blockstat {
@@ -80,9 +81,13 @@ struct blockif_elem {
 struct blockif_ctxt {
 	int			bc_magic;
 	int			bc_fd;
+	int			bc_ischr;
+	int			bc_candelete;
 	int			bc_rdonly;
 	off_t			bc_size;
 	int			bc_sectsz;
+	int			bc_psectsz;
+	int			bc_psectoff;
 	pthread_t		bc_btid;
         pthread_mutex_t		bc_mtx;
         pthread_cond_t		bc_cond;
@@ -169,6 +174,7 @@ static void
 blockif_proc(struct blockif_ctxt *bc, struct blockif_elem *be)
 {
 	struct blockif_req *br;
+	off_t arg[2];
 	int err;
 
 	br = be->be_req;
@@ -188,6 +194,24 @@ blockif_proc(struct blockif_ctxt *bc, struct blockif_elem *be)
 			err = errno;
 		break;
 	case BOP_FLUSH:
+		if (bc->bc_ischr) {
+			if (ioctl(bc->bc_fd, DIOCGFLUSH))
+				err = errno;
+		} else if (fsync(bc->bc_fd))
+			err = errno;
+		break;
+	case BOP_DELETE:
+		if (!bc->bc_candelete)
+			err = EOPNOTSUPP;
+		else if (bc->bc_rdonly)
+			err = EROFS;
+		else if (bc->bc_ischr) {
+			arg[0] = br->br_offset;
+			arg[1] = br->br_iov[0].iov_len;
+			if (ioctl(bc->bc_fd, DIOCGDELETE, arg))
+				err = errno;
+		} else
+			err = EOPNOTSUPP;
 		break;
 	default:
 		err = EINVAL;
@@ -268,9 +292,10 @@ blockif_open(const char *optstr, const char *ident)
 	char *nopt, *xopts;
 	struct blockif_ctxt *bc;
 	struct stat sbuf;
-	off_t size;
+	struct diocgattr_arg arg;
+	off_t size, psectsz, psectoff;
 	int extra, fd, i, sectsz;
-	int nocache, sync, ro;
+	int nocache, sync, ro, candelete;
 
 	pthread_once(&blockif_once, blockif_init);
 
@@ -323,6 +348,8 @@ blockif_open(const char *optstr, const char *ident)
 	 */
         size = sbuf.st_size;
 	sectsz = DEV_BSIZE;
+	psectsz = psectoff = 0;
+	candelete = 0;
 	if (S_ISCHR(sbuf.st_mode)) {
 		if (ioctl(fd, DIOCGMEDIASIZE, &size) < 0 ||
 		    ioctl(fd, DIOCGSECTORSIZE, &sectsz)) {
@@ -332,7 +359,14 @@ blockif_open(const char *optstr, const char *ident)
 		}
 		assert(size != 0);
 		assert(sectsz != 0);
-	}
+		if (ioctl(fd, DIOCGSTRIPESIZE, &psectsz) == 0 && psectsz > 0)
+			ioctl(fd, DIOCGSTRIPEOFFSET, &psectoff);
+		strlcpy(arg.name, "GEOM::candelete", sizeof(arg.name));
+		arg.len = sizeof(arg.value.i);
+		if (ioctl(fd, DIOCGATTR, &arg) == 0)
+			candelete = arg.value.i;
+	} else
+		psectsz = sbuf.st_blksize;
 
 	bc = calloc(1, sizeof(struct blockif_ctxt));
 	if (bc == NULL) {
@@ -342,9 +376,13 @@ blockif_open(const char *optstr, const char *ident)
 
 	bc->bc_magic = BLOCKIF_SIG;
 	bc->bc_fd = fd;
+	bc->bc_ischr = S_ISCHR(sbuf.st_mode);
+	bc->bc_candelete = candelete;
 	bc->bc_rdonly = ro;
 	bc->bc_size = size;
 	bc->bc_sectsz = sectsz;
+	bc->bc_psectsz = psectsz;
+	bc->bc_psectoff = psectoff;
 	pthread_mutex_init(&bc->bc_mtx, NULL);
 	pthread_cond_init(&bc->bc_cond, NULL);
 	TAILQ_INIT(&bc->bc_freeq);
@@ -416,6 +454,14 @@ blockif_flush(struct blockif_ctxt *bc, struct blockif_req *breq)
 
 	assert(bc->bc_magic == BLOCKIF_SIG);
 	return (blockif_request(bc, breq, BOP_FLUSH));
+}
+
+int
+blockif_delete(struct blockif_ctxt *bc, struct blockif_req *breq)
+{
+
+	assert(bc->bc_magic == BLOCKIF_SIG);
+	return (blockif_request(bc, breq, BOP_DELETE));
 }
 
 int
@@ -595,6 +641,15 @@ blockif_sectsz(struct blockif_ctxt *bc)
 	return (bc->bc_sectsz);
 }
 
+void
+blockif_psectsz(struct blockif_ctxt *bc, int *size, int *off)
+{
+
+	assert(bc->bc_magic == BLOCKIF_SIG);
+	*size = bc->bc_psectsz;
+	*off = bc->bc_psectoff;
+}
+
 int
 blockif_queuesz(struct blockif_ctxt *bc)
 {
@@ -609,4 +664,12 @@ blockif_is_ro(struct blockif_ctxt *bc)
 
 	assert(bc->bc_magic == BLOCKIF_SIG);
 	return (bc->bc_rdonly);
+}
+
+int
+blockif_candelete(struct blockif_ctxt *bc)
+{
+
+	assert(bc->bc_magic == BLOCKIF_SIG);
+	return (bc->bc_candelete);
 }
