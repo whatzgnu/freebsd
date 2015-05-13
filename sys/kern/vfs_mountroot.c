@@ -240,7 +240,7 @@ vfs_mountroot_devfs(struct thread *td, struct mount **mpp)
 
 	error = kern_symlink(td, "/", "dev", UIO_SYSSPACE);
 	if (error)
-		printf("kern_symlink /dev -> / returns %d\n", error);
+		printf("kern_symlink /dev -> / returns %d \n", error);
 
 	return (error);
 }
