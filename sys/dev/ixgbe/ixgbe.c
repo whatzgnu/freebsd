@@ -819,7 +819,7 @@ ixgbe_mq_start(struct ifnet *ifp, struct mbuf *m)
 	int 		i, err = 0;
 
 	/* Which queue to use */
-	if ((m->m_flags & M_FLOWID) != 0)
+	if (M_HASHTYPE_GET(m) != M_HASHTYPE_NONE)
 		i = m->m_pkthdr.flowid % adapter->num_queues;
 	else
 		i = curcpu % adapter->num_queues;
@@ -1673,6 +1673,7 @@ static void
 ixgbe_media_status(struct ifnet * ifp, struct ifmediareq * ifmr)
 {
 	struct adapter *adapter = ifp->if_softc;
+	struct ixgbe_hw *hw = &adapter->hw;
 
 	INIT_DEBUGOUT("ixgbe_media_status: begin");
 	IXGBE_CORE_LOCK(adapter);
@@ -1688,16 +1689,27 @@ ixgbe_media_status(struct ifnet * ifp, struct ifmediareq * ifmr)
 
 	ifmr->ifm_status |= IFM_ACTIVE;
 
-	switch (adapter->link_speed) {
-		case IXGBE_LINK_SPEED_100_FULL:
+	/*
+	 * Not all NIC are 1000baseSX as an example X540T.
+	 * We must set properly the media based on NIC model.
+	 */
+	switch (hw->device_id) {
+	case IXGBE_DEV_ID_X540T:
+		if (adapter->link_speed == IXGBE_LINK_SPEED_100_FULL)
 			ifmr->ifm_active |= IFM_100_TX | IFM_FDX;
-			break;
-		case IXGBE_LINK_SPEED_1GB_FULL:
-			ifmr->ifm_active |= IFM_1000_SX | IFM_FDX;
-			break;
-		case IXGBE_LINK_SPEED_10GB_FULL:
+		else if (adapter->link_speed == IXGBE_LINK_SPEED_1GB_FULL)
+			ifmr->ifm_active |= IFM_1000_T | IFM_FDX;
+		else if (adapter->link_speed == IXGBE_LINK_SPEED_10GB_FULL)
 			ifmr->ifm_active |= adapter->optics | IFM_FDX;
-			break;
+		break;
+	default:
+		if (adapter->link_speed == IXGBE_LINK_SPEED_100_FULL)
+			ifmr->ifm_active |= IFM_100_TX | IFM_FDX;
+		else if (adapter->link_speed == IXGBE_LINK_SPEED_1GB_FULL)
+			ifmr->ifm_active |= IFM_1000_SX | IFM_FDX;
+		else if (adapter->link_speed == IXGBE_LINK_SPEED_10GB_FULL)
+			ifmr->ifm_active |= adapter->optics | IFM_FDX;
+		break;
 	}
 
 	IXGBE_CORE_UNLOCK(adapter);
@@ -4583,7 +4595,7 @@ ixgbe_rxeof(struct ix_queue *que)
 				ixgbe_rx_checksum(staterr, sendmp, ptype);
 #if __FreeBSD_version >= 800000
 			sendmp->m_pkthdr.flowid = que->msix;
-			sendmp->m_flags |= M_FLOWID;
+			M_HASHTYPE_SET(sendmp, M_HASHTYPE_OPAQUE);
 #endif
 		}
 next_desc:

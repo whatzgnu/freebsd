@@ -776,6 +776,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 			if (__elfN(nxstack))
 				imgp->stack_prot =
 				    __elfN(trans_prot)(phdr[i].p_flags);
+			imgp->stack_sz = phdr[i].p_memsz;
 			break;
 		}
 	}
@@ -1392,7 +1393,8 @@ each_writable_segment(td, func, closure)
 			object = backing_object;
 		}
 		ignore_entry = object->type != OBJT_DEFAULT &&
-		    object->type != OBJT_SWAP && object->type != OBJT_VNODE;
+		    object->type != OBJT_SWAP && object->type != OBJT_VNODE &&
+		    object->type != OBJT_PHYS;
 		VM_OBJECT_RUNLOCK(object);
 		if (ignore_entry)
 			continue;

@@ -702,7 +702,8 @@ sfxge_if_transmit(struct ifnet *ifp, struct mbuf *m)
 	if (m->m_pkthdr.csum_flags & (CSUM_DELAY_DATA | CSUM_TSO)) {
 		int index = 0;
 
-		if (m->m_flags & M_FLOWID) {
+		/* check if flowid is set */
+		if (M_HASHTYPE_GET(m) != M_HASHTYPE_NONE) {
 			uint32_t hash = m->m_pkthdr.flowid;
 
 			index = sc->rx_indir_table[hash % SFXGE_RX_SCALE_MAX];
@@ -1024,7 +1025,7 @@ sfxge_tx_queue_tso(struct sfxge_txq *txq, struct mbuf *mbuf,
 		KASSERT(n_dma_seg, ("no payload found in TSO packet"));
 		++dma_seg;
 	}
-	tso.in_len = dma_seg->ds_len + (tso.header_len - skipped);
+	tso.in_len = dma_seg->ds_len - (tso.header_len - skipped);
 	tso.dma_addr = dma_seg->ds_addr + (tso.header_len - skipped);
 
 	id = txq->added & txq->ptr_mask;

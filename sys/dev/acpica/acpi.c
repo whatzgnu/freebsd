@@ -256,16 +256,6 @@ static char acpi_remove_interface[256];
 TUNABLE_STR("hw.acpi.remove_interface", acpi_remove_interface,
     sizeof(acpi_remove_interface));
 
-/*
- * Allow override of whether methods execute in parallel or not.
- * Enable this for serial behavior, which fixes "AE_ALREADY_EXISTS"
- * errors for AML that really can't handle parallel method execution.
- * It is off by default since this breaks recursive methods and
- * some IBMs use such code.
- */
-static int acpi_serialize_methods;
-TUNABLE_INT("hw.acpi.serialize_methods", &acpi_serialize_methods);
-
 /* Allow users to dump Debug objects without ACPI debugger. */
 static int acpi_debug_objects;
 TUNABLE_INT("debug.acpi.enable_debug_objects", &acpi_debug_objects);
@@ -278,6 +268,12 @@ static int acpi_interpreter_slack = 1;
 TUNABLE_INT("debug.acpi.interpreter_slack", &acpi_interpreter_slack);
 SYSCTL_INT(_debug_acpi, OID_AUTO, interpreter_slack, CTLFLAG_RDTUN,
     &acpi_interpreter_slack, 1, "Turn on interpreter slack mode.");
+
+/* Ignore register widths set by FADT and use default widths instead. */
+static int acpi_ignore_reg_width = 1;
+TUNABLE_INT("debug.acpi.default_register_width", &acpi_ignore_reg_width);
+SYSCTL_INT(_debug_acpi, OID_AUTO, default_register_width, CTLFLAG_RDTUN,
+    &acpi_ignore_reg_width, 1, "Ignore register widths set by FADT");
 
 #ifdef __amd64__
 /* Reset system clock while resuming.  XXX Remove once tested. */
@@ -474,9 +470,9 @@ acpi_attach(device_t dev)
      * Set the globals from our tunables.  This is needed because ACPI-CA
      * uses UINT8 for some values and we have no tunable_byte.
      */
-    AcpiGbl_AllMethodsSerialized = acpi_serialize_methods ? TRUE : FALSE;
     AcpiGbl_EnableInterpreterSlack = acpi_interpreter_slack ? TRUE : FALSE;
     AcpiGbl_EnableAmlDebugObject = acpi_debug_objects ? TRUE : FALSE;
+    AcpiGbl_UseDefaultRegisterWidths = acpi_ignore_reg_width ? TRUE : FALSE;
 
 #ifndef ACPI_DEBUG
     /*
@@ -1152,7 +1148,7 @@ acpi_sysres_alloc(device_t dev)
 	if (res != NULL) {
 	    rman_manage_region(rm, rman_get_start(res), rman_get_end(res));
 	    rle->res = res;
-	} else
+	} else if (bootverbose)
 	    device_printf(dev, "reservation of %lx, %lx (%d) failed\n",
 		rle->start, rle->count, rle->type);
     }
@@ -2753,6 +2749,8 @@ acpi_EnterSleepState(struct acpi_softc *sc, int state)
 	return_ACPI_STATUS (AE_OK);
     }
 
+    EVENTHANDLER_INVOKE(power_suspend_early);
+    stop_all_proc();
     EVENTHANDLER_INVOKE(power_suspend);
 
     if (smp_started) {
@@ -2895,6 +2893,8 @@ backout:
 	sched_unbind(curthread);
 	thread_unlock(curthread);
     }
+
+    resume_all_proc();
 
     EVENTHANDLER_INVOKE(power_resume);
 

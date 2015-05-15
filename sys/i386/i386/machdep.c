@@ -1359,15 +1359,6 @@ cpu_idle_hlt(sbintime_t sbt)
 }
 #endif
 
-/*
- * MWAIT cpu power states.  Lower 4 bits are sub-states.
- */
-#define	MWAIT_C0	0xf0
-#define	MWAIT_C1	0x00
-#define	MWAIT_C2	0x10
-#define	MWAIT_C3	0x20
-#define	MWAIT_C4	0x30
-
 static void
 cpu_idle_mwait(sbintime_t sbt)
 {
@@ -1478,7 +1469,7 @@ cpu_idle(int busy)
 
 #ifndef XEN
 	/* Apply AMD APIC timer C1E workaround. */
-	if (cpu_ident_amdc1e && cpu_disable_deep_sleep) {
+	if (cpu_ident_amdc1e && cpu_disable_c3_sleep) {
 		msr = rdmsr(MSR_AMDK8_IPM);
 		if (msr & AMDK8_CMPHALT)
 			wrmsr(MSR_AMDK8_IPM, msr & ~AMDK8_CMPHALT);
@@ -3080,7 +3071,7 @@ init386(first)
 	    dblfault_tss.tss_esp2 = (int)&dblfault_stack[sizeof(dblfault_stack)];
 	dblfault_tss.tss_ss = dblfault_tss.tss_ss0 = dblfault_tss.tss_ss1 =
 	    dblfault_tss.tss_ss2 = GSEL(GDATA_SEL, SEL_KPL);
-#ifdef PAE
+#if defined(PAE) || defined(PAE_TABLES)
 	dblfault_tss.tss_cr3 = (int)IdlePDPT;
 #else
 	dblfault_tss.tss_cr3 = (int)IdlePTD;
@@ -3133,7 +3124,7 @@ init386(first)
 
 	/* setup proc 0's pcb */
 	thread0.td_pcb->pcb_flags = 0;
-#ifdef PAE
+#if defined(PAE) || defined(PAE_TABLES)
 	thread0.td_pcb->pcb_cr3 = (int)IdlePDPT;
 #else
 	thread0.td_pcb->pcb_cr3 = (int)IdlePTD;
@@ -3385,7 +3376,7 @@ init386(first)
 	    dblfault_tss.tss_esp2 = (int)&dblfault_stack[sizeof(dblfault_stack)];
 	dblfault_tss.tss_ss = dblfault_tss.tss_ss0 = dblfault_tss.tss_ss1 =
 	    dblfault_tss.tss_ss2 = GSEL(GDATA_SEL, SEL_KPL);
-#ifdef PAE
+#if defined(PAE) || defined(PAE_TABLES)
 	dblfault_tss.tss_cr3 = (int)IdlePDPT;
 #else
 	dblfault_tss.tss_cr3 = (int)IdlePTD;
@@ -3457,7 +3448,7 @@ init386(first)
 
 	/* setup proc 0's pcb */
 	thread0.td_pcb->pcb_flags = 0;
-#ifdef PAE
+#if defined(PAE) || defined(PAE_TABLES)
 	thread0.td_pcb->pcb_cr3 = (int)IdlePDPT;
 #else
 	thread0.td_pcb->pcb_cr3 = (int)IdlePTD;

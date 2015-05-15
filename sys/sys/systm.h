@@ -295,8 +295,9 @@ sbintime_t 	cpu_idleclock(void);
 void	cpu_activeclock(void);
 void	cpu_new_callout(int cpu, sbintime_t bt, sbintime_t bt_opt);
 void	cpu_et_frequency(struct eventtimer *et, uint64_t newfreq);
-extern int	cpu_can_deep_sleep;
-extern int	cpu_disable_deep_sleep;
+extern int	cpu_deepest_sleep;
+extern int	cpu_disable_c2_sleep;
+extern int	cpu_disable_c3_sleep;
 
 int	cr_cansee(struct ucred *u1, struct ucred *u2);
 int	cr_canseesocket(struct ucred *cred, struct socket *so);
@@ -422,33 +423,6 @@ int alloc_unr(struct unrhdr *uh);
 int alloc_unr_specific(struct unrhdr *uh, u_int item);
 int alloc_unrl(struct unrhdr *uh);
 void free_unr(struct unrhdr *uh, u_int item);
-
-/*
- * Population count algorithm using SWAR approach
- * - "SIMD Within A Register".
- */
-static __inline uint32_t
-bitcount32(uint32_t x)
-{
-
-	x = (x & 0x55555555) + ((x & 0xaaaaaaaa) >> 1);
-	x = (x & 0x33333333) + ((x & 0xcccccccc) >> 2);
-	x = (x + (x >> 4)) & 0x0f0f0f0f;
-	x = (x + (x >> 8));
-	x = (x + (x >> 16)) & 0x000000ff;
-	return (x);
-}
-
-static __inline uint16_t
-bitcount16(uint32_t x)
-{
-
-	x = (x & 0x5555) + ((x & 0xaaaa) >> 1);
-	x = (x & 0x3333) + ((x & 0xcccc) >> 2);
-	x = (x + (x >> 4)) & 0x0f0f;
-	x = (x + (x >> 8)) & 0x00ff;
-	return (x);
-}
 
 void	intr_prof_stack_use(struct thread *td, struct trapframe *frame);
 

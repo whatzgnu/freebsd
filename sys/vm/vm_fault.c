@@ -101,6 +101,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_kern.h>
 #include <vm/vm_pager.h>
 #include <vm/vm_extern.h>
+#include <vm/vm_reserv.h>
 
 #define PFBAK 4
 #define PFFOR 4
@@ -344,6 +345,10 @@ RetryFault:;
 		vm_map_lock(fs.map);
 		if (vm_map_lookup_entry(fs.map, vaddr, &fs.entry) &&
 		    (fs.entry->eflags & MAP_ENTRY_IN_TRANSITION)) {
+			if (fs.vp != NULL) {
+				vput(fs.vp);
+				fs.vp = NULL;
+			}
 			fs.entry->eflags |= MAP_ENTRY_NEEDS_WAKEUP;
 			vm_map_unlock_and_wait(fs.map, 0);
 		} else
@@ -844,6 +849,14 @@ vnode_locked:
 					unlock_and_deallocate(&fs);
 					goto RetryFault;
 				}
+#if VM_NRESERVLEVEL > 0
+				/*
+				 * Rename the reservation.
+				 */
+				vm_reserv_rename(fs.m, fs.first_object,
+				    fs.object, OFF_TO_IDX(
+				    fs.first_object->backing_object_offset));
+#endif
 				vm_page_xbusy(fs.m);
 				fs.first_m = fs.m;
 				fs.m = NULL;
