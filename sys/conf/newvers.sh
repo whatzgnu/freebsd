@@ -37,7 +37,7 @@ if [ "X${BRANCH_OVERRIDE}" != "X" ]; then
 	BRANCH=${BRANCH_OVERRIDE}
 fi
 RELEASE="${REVISION}-${BRANCH}"
-VERSION="${TYPE} ${RELEASE}
+VERSION="${TYPE} ${RELEASE}"
 
 if [ "X${SYSDIR}" = "X" ]; then
     SYSDIR=$(dirname $0)/..
