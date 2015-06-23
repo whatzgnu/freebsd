@@ -71,9 +71,10 @@ options 	MAC			# TrustedBSD MAC Framework
 options 	KDTRACE_FRAME		# Ensure frames are compiled in
 options 	KDTRACE_HOOKS		# Kernel DTrace hooks
 options 	DDB_CTF			# Kernel ELF linker loads CTF data
-options 	DDB			# Support DDB.
-options 	INCLUDE_CONFIG_FILE     # Include this file in kernel
-options		VIMAGE			# Provide jails with vnet support
+options 	INCLUDE_CONFIG_FILE	# Include this file in kernel
+options 	RACCT			# Resource accounting framework
+options 	RACCT_DEFAULT_TO_DISABLED # Set kern.racct.enable=0 by default
+options 	RCTL			# Resource limits
 
 # Debugging support.  Always need this:
 options 	KDB			# Enable kernel debugger support.
@@ -92,6 +93,9 @@ device		pci
 
 # Floppy drives
 device		fdc
+
+# Enable VIMAGE - KPM
+options		VIMAGE			# Provide jails with vnet support
 
 # ATA controllers
 device		ahci			# AHCI-compatible SATA controllers
