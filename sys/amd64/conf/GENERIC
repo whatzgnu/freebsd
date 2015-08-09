@@ -94,9 +94,6 @@ device		pci
 # Floppy drives
 device		fdc
 
-# Enable VIMAGE - KPM
-options		VIMAGE			# Provide jails with vnet support
-
 # ATA controllers
 device		ahci			# AHCI-compatible SATA controllers
 device		ata			# Legacy ATA/SATA controllers
