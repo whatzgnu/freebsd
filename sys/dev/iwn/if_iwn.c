@@ -119,6 +119,8 @@ static const struct iwn_ident iwn_ident_table[] = {
 	{ 0x8086, IWN_DID_5x50_2, "Intel WiMAX/WiFi Link 5350"			},
 	{ 0x8086, IWN_DID_5x50_3, "Intel WiMAX/WiFi Link 5150"			},
 	{ 0x8086, IWN_DID_5x50_4, "Intel WiMAX/WiFi Link 5150"			},
+	{ 0x8086, IWN_DID_6035_1, "Intel Centrino Advanced 6235"		},
+	{ 0x8086, IWN_DID_6035_2, "Intel Centrino Advanced 6235"		},
 	{ 0, 0, NULL }
 };
 
