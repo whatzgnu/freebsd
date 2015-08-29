@@ -2443,7 +2443,7 @@ upgrade_merge () {
 				continue
 			fi
 
- 			if [ "$NON_INTERACTIVE" = "yes" ] ; then
+			if [ "$NON_INTERACTIVE" = "yes" ] ; then
 				cat <<-EOF
 The following file could not be merged automatically: ${F}
 Defaulting to the old copy.
@@ -2488,8 +2488,12 @@ manually...
 The following file will be removed, as it no longer exists in
 FreeBSD ${RELNUM}: ${F}
 				EOF
-				continuep < /dev/tty || return 1
-				continue
+				if [ "$NON_INTERACTIVE" = "yes" ] ; then
+					continue
+				else
+					continuep < /dev/tty || return 1
+					continue
+				fi
 			fi
 
 			# Print changes for the user's approval.
@@ -2500,7 +2504,11 @@ FreeBSD ${RELNUM} have been merged into ${F}:
 EOF
 			diff -U 5 -L "current version" -L "new version"	\
 			    merge/old/${F} merge/new/${F} || true
-			continuep < /dev/tty || return 1
+			if [ "$NON_INTERACTIVE" = "yes" ] ; then
+				continue
+			else
+				continuep < /dev/tty || return 1
+			fi
 		done < $1-paths
 
 		# Store merged files.
