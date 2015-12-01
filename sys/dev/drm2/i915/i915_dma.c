@@ -1772,10 +1772,8 @@ int i915_driver_unload(struct drm_device *dev)
 	intel_opregion_fini(dev);
 
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
-#ifdef __linux__
 		/* Flush any outstanding unpin_work. */
-		flush_workqueue(dev_priv->wq);
-#endif
+		taskqueue_drain_all(dev_priv->wq);
 
 		DRM_LOCK(dev);
 		i915_gem_free_all_phys_object(dev);
@@ -1796,7 +1794,7 @@ int i915_driver_unload(struct drm_device *dev)
 	intel_teardown_mchbar(dev);
 
 	/*
-	 * Note Linux<->FreeBSD: Free mmio_map after
+	 * NOTE Linux<->FreeBSD: Free mmio_map after
 	 * intel_teardown_gmbus(), because, on FreeBSD,
 	 * intel_i2c_reset() is called during iicbus_detach().
 	 */

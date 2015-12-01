@@ -700,7 +700,7 @@ static int i8xx_do_reset(struct drm_device *dev)
 		POSTING_READ(DEBUG_RESET_I830);
 	}
 
-	pause("i8xxrst2", 1);
+	pause("i8xxrst2", onems);
 
 	I915_WRITE(D_STATE, I915_READ(D_STATE) & ~DSTATE_GFX_RESET_I830);
 	POSTING_READ(D_STATE);
@@ -1132,10 +1132,8 @@ static struct drm_driver driver = {
 	.fops = &i915_driver_fops,
 #endif
 #ifdef __FreeBSD__
-#if defined(CONFIG_DEBUG_FS)
 	.sysctl_init	= i915_sysctl_init,
 	.sysctl_cleanup	= i915_sysctl_cleanup,
-#endif
 #endif
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
