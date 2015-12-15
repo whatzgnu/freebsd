@@ -12,9 +12,6 @@ MK_SSP=		no
 PROG=		loader.sym
 INTERNALPROG=
 
-#LIBZFSBOOT=	${.OBJDIR}/../../zfs/libzfsboot.a
-
-.PATH: ${.CURDIR}/../../efi/loader
 # architecture-specific loader code
 SRCS=	autoload.c \
 	bootinfo.c \
@@ -25,9 +22,7 @@ SRCS=	autoload.c \
 	self_reloc.c \
 	smbios.c \
 	vers.c \
-        ${ZFS_C}
-
-ZFS_C = ${.CURDIR}/../../zfs/zfs.c
+	${.CURDIR}/zfs.c
 
 .PATH: ${.CURDIR}/arch/${MACHINE}
 # For smbios.c
@@ -86,12 +81,15 @@ FILESMODE_loader.efi=	${BINMODE}
 LDSCRIPT=	${.CURDIR}/arch/${MACHINE}/ldscript.${MACHINE}
 LDFLAGS+=	-Wl,-T${LDSCRIPT} -Wl,-Bsymbolic -shared
 
-CLEANFILES+=	vers.c loader.efi
+CLEANFILES+=	zfs.c vers.c loader.efi
 
 NEWVERSWHAT=	"EFI loader" ${MACHINE}
 
 vers.c:	${.CURDIR}/../../common/newvers.sh ${.CURDIR}/../../efi/loader/version
 	sh ${.CURDIR}/../../common/newvers.sh ${.CURDIR}/version ${NEWVERSWHAT}
+
+zfs.c:
+	cp ${.CURDIR}/../../zfs/zfs.c ${.CURDIR}
 
 OBJCOPY?=	objcopy
 OBJDUMP?=	objdump
@@ -116,9 +114,9 @@ loader.efi: ${PROG}
 
 LIBEFI=		${.OBJDIR}/../libefi/libefi.a
 
-DPADD=		${LIBFICL} ${LIBEFI} ${LIBFDT} ${LIBEFI_FDT} ${LIBSTAND} \
+DPADD=		${LIBFICL} ${LIBEFI} ${LIBFDT} ${LIBEFI_FDT} ../../../../lib/libstand/libstand.a \
 		${LDSCRIPT}
-LDADD=		${LIBFICL} ${LIBEFI} ${LIBFDT} ${LIBEFI_FDT} ${LIBSTAND}
+LDADD=		${LIBFICL} ${LIBEFI} ${LIBFDT} ${LIBEFI_FDT} ../../../../lib/libstand/libstand.a
 
 .endif # ${COMPILER_TYPE} != "gcc"
 
