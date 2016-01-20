@@ -45,13 +45,20 @@ vdev_read(vdev_t *vdev, void *priv, off_t off, void *buf, size_t bytes)
 {
 	dev_info_t *devinfo;
 	off_t lba;
+	EFI_STATUS status;
 
 	devinfo = (dev_info_t *)priv;
 	lba = off / devinfo->dev->Media->BlockSize;
 
-	if (devinfo->dev->ReadBlocks(devinfo->dev,
-	    devinfo->dev->Media->MediaId, lba, bytes, buf) != EFI_SUCCESS)
+	status = devinfo->dev->ReadBlocks(devinfo->dev,
+	    devinfo->dev->Media->MediaId, lba, bytes, buf);
+	if (status != EFI_SUCCESS) {
+		DPRINTF("vdev_read: failed dev: %p, id: %u, lba: %zu, size: %zu,"
+                    " status: %lu\n", devinfo->dev,
+                    devinfo->dev->Media->MediaId, lba, bytes,
+                    EFI_ERROR_CODE(status));
 		return (-1);
+	}
 
 	return (0);
 }
@@ -66,7 +73,8 @@ probe(dev_info_t *dev)
 	/* ZFS consumes the dev on success so we need a copy. */
 	if ((status = bs->AllocatePool(EfiLoaderData, sizeof(*dev),
 	    (void**)&tdev)) != EFI_SUCCESS) {
-		DPRINTF("Failed to allocate tdev (%lu)\n", status);
+		DPRINTF("Failed to allocate tdev (%lu)\n",
+		    EFI_ERROR_CODE(status));
 		return (status);
 	}
 	memcpy(tdev, dev, sizeof(*dev));
@@ -119,7 +127,7 @@ try_load(dev_info_t *devinfo, const char *loader_path, void **bufp, size_t *bufs
 	if ((status = bs->AllocatePool(EfiLoaderData, (UINTN)st.st_size, &buf))
 	    != EFI_SUCCESS) {
 		printf("Failed to allocate load buffer for pool %s (%lu)\n",
-		    spa->spa_name, status);
+		    spa->spa_name, EFI_ERROR_CODE(status));
 		return (EFI_INVALID_PARAMETER);
 	}
 

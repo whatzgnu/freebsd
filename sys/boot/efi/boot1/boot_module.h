@@ -36,12 +36,9 @@
 #include <eficonsctl.h>
 
 #ifdef EFI_DEBUG
-#define DPRINTF(fmt, args...) \
-        do { \
-                printf(fmt, ##args) \
-        } while (0)
+#define DPRINTF(fmt, ...) printf(fmt, __VA_ARGS__)
 #else
-#define DPRINTF(fmt, args...) {}
+#define DPRINTF(fmt, ...) {}
 #endif
 
 /* EFI device info */
@@ -103,8 +100,6 @@ extern const boot_module_t zfs_module;
 
 /* Functions available to modules. */
 extern void add_device(dev_info_t **devinfop, dev_info_t *devinfo);
-extern int strcmp(const char *s1, const char *s2);
-extern void bcopy(const void *src, void *dst, size_t len);
 extern void panic(const char *fmt, ...) __dead2;
 extern int printf(const char *fmt, ...);
 extern int vsnprintf(char *str, size_t sz, const char *fmt, va_list ap);
