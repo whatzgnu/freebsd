@@ -582,6 +582,7 @@ struct bxe_fastpath {
 #define BXE_FP_TX_LOCK(fp)        mtx_lock(&fp->tx_mtx)
 #define BXE_FP_TX_UNLOCK(fp)      mtx_unlock(&fp->tx_mtx)
 #define BXE_FP_TX_LOCK_ASSERT(fp) mtx_assert(&fp->tx_mtx, MA_OWNED)
+#define BXE_FP_TX_TRYLOCK(fp)     mtx_trylock(&fp->tx_mtx)
 
 #define BXE_FP_RX_LOCK(fp)        mtx_lock(&fp->rx_mtx)
 #define BXE_FP_RX_UNLOCK(fp)      mtx_unlock(&fp->rx_mtx)
@@ -1829,6 +1830,11 @@ struct bxe_softc {
     uint8_t prio_to_cos[BXE_MAX_PRIORITY];
 
     int panic;
+
+    struct cdev *ioctl_dev;
+    void *grc_dump;
+    int trigger_grcdump;
+    int grcdump_done;
 }; /* struct bxe_softc */
 
 /* IOCTL sub-commands for edebug and firmware upgrade */
@@ -2295,6 +2301,7 @@ void ecore_storm_memset_struct(struct bxe_softc *sc, uint32_t addr,
                           "ERROR: " format,           \
                           ## args);                   \
         }                                             \
+        sc->trigger_grcdump |= 0x1;                   \
     } while(0)
 
 #ifdef ECORE_STOP_ON_ERROR

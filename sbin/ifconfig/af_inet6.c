@@ -485,8 +485,6 @@ static struct cmd inet6_cmds[] = {
 	DEF_CMD("-no_prefer_iface",-ND6_IFF_NO_PREFER_IFACE,setnd6flags),
 	DEF_CMD("no_dad",	ND6_IFF_NO_DAD,		setnd6flags),
 	DEF_CMD("-no_dad",	-ND6_IFF_NO_DAD,	setnd6flags),
-	DEF_CMD("ignoreloop",	ND6_IFF_IGNORELOOP,	setnd6flags),
-	DEF_CMD("-ignoreloop",	-ND6_IFF_IGNORELOOP,	setnd6flags),
 	DEF_CMD_ARG("pltime",        			setip6pltime),
 	DEF_CMD_ARG("vltime",        			setip6vltime),
 	DEF_CMD("eui64",	0,			setip6eui64),
@@ -518,7 +516,6 @@ static struct option in6_Lopt = { .opt = "L", .opt_usage = "[-L]", .cb = in6_Lop
 static __constructor void
 inet6_ctor(void)
 {
-#define	N(a)	(sizeof(a) / sizeof(a[0]))
 	size_t i;
 
 #ifndef RESCUE
@@ -526,9 +523,8 @@ inet6_ctor(void)
 		return;
 #endif
 
-	for (i = 0; i < N(inet6_cmds);  i++)
+	for (i = 0; i < nitems(inet6_cmds);  i++)
 		cmd_register(&inet6_cmds[i]);
 	af_register(&af_inet6);
 	opt_register(&in6_Lopt);
-#undef N
 }

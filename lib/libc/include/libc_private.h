@@ -368,11 +368,20 @@ __pid_t		__sys_wait6(enum idtype, __id_t, int *, int,
 __ssize_t	__sys_write(int, const void *, __size_t);
 __ssize_t	__sys_writev(int, const struct iovec *, int);
 
+int		__libc_sigaction(int, const struct sigaction *,
+		    struct sigaction *) __hidden;
+int		__libc_sigprocmask(int, const __sigset_t *, __sigset_t *)
+		    __hidden;
+int		__libc_sigsuspend(const __sigset_t *) __hidden;
 int		__libc_sigwait(const __sigset_t * __restrict,
 		    int * restrict sig);
 int		__libc_system(const char *);
 int		__libc_tcdrain(int);
 int		__fcntl_compat(int fd, int cmd, ...);
+
+int		__sys_futimens(int fd, const struct timespec *times) __hidden;
+int		__sys_utimensat(int fd, const char *path,
+		    const struct timespec *times, int flag) __hidden;
 
 /* execve() with PATH processing to implement posix_spawnp() */
 int _execvpe(const char *, char * const *, char * const *);

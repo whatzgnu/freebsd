@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/protosw.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
+#include <sys/sysctl.h>
 
 #include <netinet/in.h>
 
@@ -202,13 +203,13 @@ struct protox {
 	  igmp_stats,	NULL,		"igmp",	1,	IPPROTO_IGMP },
 #ifdef IPSEC
 	{ -1,		N_IPSECSTAT,	1,	NULL,	/* keep as compat */
-	  ipsec_stats,	NULL,		"ipsec", 0,	0},
+	  ipsec_stats,	NULL,		"ipsec", 1,	0},
 	{ -1,		N_AHSTAT,	1,	NULL,
-	  ah_stats,	NULL,		"ah",	0,	0},
+	  ah_stats,	NULL,		"ah",	1,	0},
 	{ -1,		N_ESPSTAT,	1,	NULL,
-	  esp_stats,	NULL,		"esp",	0,	0},
+	  esp_stats,	NULL,		"esp",	1,	0},
 	{ -1,		N_IPCOMPSTAT,	1,	NULL,
-	  ipcomp_stats,	NULL,		"ipcomp", 0,	0},
+	  ipcomp_stats,	NULL,		"ipcomp", 1,	0},
 #endif
 	{ N_RIPCBINFO,	N_PIMSTAT,	1,	protopr,
 	  pim_stats,	NULL,		"pim",	1,	IPPROTO_PIM },
@@ -240,7 +241,7 @@ struct protox ip6protox[] = {
 #endif
 #ifdef IPSEC
 	{ -1,		N_IPSEC6STAT,	1,	NULL,
-	  ipsec_stats,	NULL,		"ipsec6", 0,	0 },
+	  ipsec_stats,	NULL,		"ipsec6", 1,	0 },
 #endif
 #ifdef notyet
 	{ -1,		N_PIM6STAT,	1,	NULL,
@@ -643,6 +644,29 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
+int
+fetch_stats(const char *sysctlname, u_long off, void *stats, size_t len,
+    int (*kreadfn)(u_long, void *, size_t))
+{
+	int error;
+
+	if (live) {
+		memset(stats, 0, len);
+		if (zflag)
+			error = sysctlbyname(sysctlname, NULL, NULL, stats,
+			    len);
+		else
+			error = sysctlbyname(sysctlname, stats, &len, NULL, 0);
+		if (error == -1 && errno != ENOENT)
+			warn("sysctl %s", sysctlname);
+	} else {
+		if (off == 0)
+			return (1);
+		error = kreadfn(off, stats, len);
+	}
+	return (error);
+}
+
 /*
  * Print out protocol statistics or control blocks (per sflag).
  * If the interface was not specifically requested, and the symbol
@@ -785,19 +809,31 @@ kread_counter(u_long addr)
 int
 kread_counters(u_long addr, void *buf, size_t size)
 {
-	uint64_t *c = buf;
+	uint64_t *c;
+	u_long *counters;
+	size_t i, n;
 
 	if (kvmd_init() < 0)
 		return (-1);
 
-	if (kread(addr, buf, size) < 0)
+	if (size % sizeof(uint64_t) != 0) {
+		warnx("kread_counters: invalid counter set size");
 		return (-1);
-
-	while (size != 0) {
-		*c = kvm_counter_u64_fetch(kvmd, *c);
-		size -= sizeof(*c);
-		c++;
 	}
+
+	n = size / sizeof(uint64_t);
+	if ((counters = malloc(n * sizeof(u_long))) == NULL)
+		err(-1, "malloc");
+	if (kread(addr, counters, n * sizeof(u_long)) < 0) {
+		free(counters);
+		return (-1);
+	}
+
+	c = buf;
+	for (i = 0; i < n; i++)
+		c[i] = kvm_counter_u64_fetch(kvmd, counters[i]);
+
+	free(counters);
 	return (0);
 }
 
