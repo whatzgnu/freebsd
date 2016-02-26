@@ -34,7 +34,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/drm2/i915/i915_drv.h>
 #include <dev/drm2/drm_dp_helper.h>
 #include <dev/drm2/drm_crtc_helper.h>
-//#include <sys/limits.h>
 
 bool intel_pipe_has_type(struct drm_crtc *crtc, int type);
 static void intel_increase_pllclock(struct drm_crtc *crtc);
@@ -5806,6 +5805,11 @@ static int haswell_crtc_mode_set(struct drm_crtc *crtc,
 		num_connectors++;
 	}
 
+	if (is_cpu_edp)
+		intel_crtc->cpu_transcoder = TRANSCODER_EDP;
+	else
+		intel_crtc->cpu_transcoder = pipe;
+
 	/* We are not sure yet this won't happen. */
 	WARN(!HAS_PCH_LPT(dev), "Unexpected PCH type %d\n",
 	     INTEL_PCH_TYPE(dev));
@@ -5986,11 +5990,6 @@ static int intel_crtc_mode_set(struct drm_crtc *crtc,
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	int pipe = intel_crtc->pipe;
 	int ret;
-
-	if (IS_HASWELL(dev) && intel_pipe_has_type(crtc, INTEL_OUTPUT_EDP))
-		intel_crtc->cpu_transcoder = TRANSCODER_EDP;
-	else
-		intel_crtc->cpu_transcoder = pipe;
 
 	drm_vblank_pre_modeset(dev, pipe);
 
