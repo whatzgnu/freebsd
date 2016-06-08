@@ -45,23 +45,6 @@
 #include <machine/_limits.h>	/* __MINSIGSTKSZ */
 #include <machine/signal.h>	/* sig_atomic_t; trap codes; sigcontext */
 
-#if __POSIX_VISIBLE >= 200809
-
-#include <sys/_pthreadtypes.h>
-#include <sys/_timespec.h>
-
-#ifndef _SIZE_T_DECLARED
-typedef	__size_t	size_t;
-#define	_SIZE_T_DECLARED
-#endif
-
-#ifndef _UID_T_DECLARED
-typedef	__uid_t		uid_t;
-#define	_UID_T_DECLARED
-#endif
-
-#endif /* __POSIX_VISIBLE >= 200809 */
-
 /*
  * System defined signals.
  */
@@ -177,9 +160,6 @@ union sigval {
 #endif
 
 #if __POSIX_VISIBLE >= 199309
-
-struct pthread_attr;
-
 struct sigevent {
 	int	sigev_notify;		/* Notification type */
 	int	sigev_signo;		/* Signal number */
@@ -188,7 +168,7 @@ struct sigevent {
 		__lwpid_t	_threadid;
 		struct {
 			void (*_function)(union sigval);
-			struct pthread_attr **_attribute;
+			void *_attribute; /* pthread_attr_t * */
 		} _sigev_thread;
 		unsigned short _kevent_flags;
 		long __spare__[8];
@@ -210,7 +190,6 @@ struct sigevent {
 #define	SIGEV_KEVENT	3		/* Generate a kevent. */
 #define	SIGEV_THREAD_ID	4		/* Send signal to a kernel thread. */
 #endif
-
 #endif /* __POSIX_VISIBLE >= 199309 */
 
 #if __POSIX_VISIBLE >= 199309 || __XSI_VISIBLE

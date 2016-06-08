@@ -33,8 +33,6 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-#include "opt_vm.h"
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/bitset.h>
@@ -51,7 +49,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/uma.h>
 #include <vm/uma_int.h>
 #include <vm/uma_dbg.h>
-#include <vm/memguard.h>
 
 static const uint32_t uma_junk = 0xdeadc0de;
 
@@ -60,17 +57,13 @@ static const uint32_t uma_junk = 0xdeadc0de;
  * prior to subsequent reallocation.
  *
  * Complies with standard ctor arg/return
+ *
  */
 int
 trash_ctor(void *mem, int size, void *arg, int flags)
 {
 	int cnt;
 	uint32_t *p;
-
-#ifdef DEBUG_MEMGUARD
-	if (is_memguard_addr(mem))
-		return (0);
-#endif
 
 	cnt = size / sizeof(uma_junk);
 
@@ -99,11 +92,6 @@ trash_dtor(void *mem, int size, void *arg)
 {
 	int cnt;
 	uint32_t *p;
-
-#ifdef DEBUG_MEMGUARD
-	if (is_memguard_addr(mem))
-		return;
-#endif
 
 	cnt = size / sizeof(uma_junk);
 
@@ -143,11 +131,6 @@ mtrash_ctor(void *mem, int size, void *arg, int flags)
 	uint32_t *p = mem;
 	int cnt;
 
-#ifdef DEBUG_MEMGUARD
-	if (is_memguard_addr(mem))
-		return (0);
-#endif
-
 	size -= sizeof(struct malloc_type *);
 	ksp = (struct malloc_type **)mem;
 	ksp += size / sizeof(struct malloc_type *);
@@ -175,11 +158,6 @@ mtrash_dtor(void *mem, int size, void *arg)
 	int cnt;
 	uint32_t *p;
 
-#ifdef DEBUG_MEMGUARD
-	if (is_memguard_addr(mem))
-		return;
-#endif
-
 	size -= sizeof(struct malloc_type *);
 	cnt = size / sizeof(uma_junk);
 
@@ -197,11 +175,6 @@ int
 mtrash_init(void *mem, int size, int flags)
 {
 	struct malloc_type **ksp;
-
-#ifdef DEBUG_MEMGUARD
-	if (is_memguard_addr(mem))
-		return (0);
-#endif
 
 	mtrash_dtor(mem, size, NULL);
 

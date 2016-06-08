@@ -331,15 +331,8 @@ ip_init(void)
 		    __func__);
 
 	/* Skip initialization of globals for non-default instances. */
-#ifdef VIMAGE
-	if (!IS_DEFAULT_VNET(curvnet)) {
-		netisr_register_vnet(&ip_nh);
-#ifdef	RSS
-		netisr_register_vnet(&ip_direct_nh);
-#endif
+	if (!IS_DEFAULT_VNET(curvnet))
 		return;
-	}
-#endif
 
 	pr = pffindproto(PF_INET, IPPROTO_RAW, SOCK_RAW);
 	if (pr == NULL)
@@ -368,15 +361,10 @@ ip_init(void)
 }
 
 #ifdef VIMAGE
-static void
-ip_destroy(void *unused __unused)
+void
+ip_destroy(void)
 {
 	int error;
-
-#ifdef	RSS
-	netisr_unregister_vnet(&ip_direct_nh);
-#endif
-	netisr_unregister_vnet(&ip_nh);
 
 	if ((error = pfil_head_unregister(&V_inet_pfil_hook)) != 0)
 		printf("%s: WARNING: unable to unregister pfil hook, "
@@ -400,8 +388,6 @@ ip_destroy(void *unused __unused)
 	/* Destroy IP reassembly queue. */
 	ipreass_destroy();
 }
-
-VNET_SYSUNINIT(ip, SI_SUB_PROTO_DOMAIN, SI_ORDER_THIRD, ip_destroy, NULL);
 #endif
 
 #ifdef	RSS

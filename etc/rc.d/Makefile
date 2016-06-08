@@ -17,7 +17,6 @@ FILES=	DAEMON \
 	auditd \
 	auditdistd \
 	bgfsck \
-	${_blacklistd} \
 	${_bluetooth} \
 	bridge \
 	${_bthidd} \
@@ -167,10 +166,6 @@ ATMPACKAGE=	atm
 FILES+=		automount
 FILES+=		automountd
 FILES+=		autounmountd
-.endif
-
-.if ${MK_BLACKLIST_SUPPORT} != "no"
-_blacklistd+=	blacklistd
 .endif
 
 .if ${MK_BLUETOOTH} != "no"

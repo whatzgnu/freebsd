@@ -2,9 +2,6 @@
 # $FreeBSD$
 
 PACKAGE=rcmds
-
-.include <src.opts.mk>
-
 PROG=	rshd
 MAN=	rshd.8
 
@@ -14,11 +11,5 @@ WARNS?=	3
 WFORMAT=0
 
 LIBADD=	util pam
-
-.if ${MK_BLACKLIST_SUPPORT} != "no"
-CFLAGS+= -DUSE_BLACKLIST -I${SRCTOP}/contrib/blacklist/include
-LIBADD+= blacklist
-LDFLAGS+=-L${LIBBLACKLISTDIR}
-.endif
 
 .include <bsd.prog.mk>

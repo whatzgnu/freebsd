@@ -199,7 +199,6 @@ static char *chrootenv = NULL;
 static void	usage(void);
 static int	confirm_zone(const char *filename);
 static int	continent_country_menu(dialogMenuItem *);
-static int	install_zoneinfo(const char *zoneinfo);
 static int	install_zoneinfo_file(const char *zoneinfo_file);
 static int	set_zone_multi(dialogMenuItem *);
 static int	set_zone_whole_country(dialogMenuItem *);
@@ -634,13 +633,13 @@ set_zone_menu(dialogMenuItem *dmi)
 	return (DITEM_LEAVE_MENU);
 }
 
-static int
+int
 set_zone_utc(void)
 {
 	if (!confirm_zone(NULL))
 		return (DITEM_FAILURE | DITEM_RECREATE);
 
-	return (install_zoneinfo("UTC"));
+	return (install_zoneinfo_file(NULL));
 }
 
 static int

@@ -174,7 +174,6 @@ _none_wcsnrtombs(char * __restrict dst, const wchar_t ** __restrict src,
 	nchr = 0;
 	while (len-- > 0 && nwc-- > 0) {
 		if (*s < 0 || *s > UCHAR_MAX) {
-			*src = s;
 			errno = EILSEQ;
 			return ((size_t)-1);
 		}

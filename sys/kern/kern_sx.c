@@ -544,10 +544,7 @@ _sx_xlock_hard(struct sx *sx, uintptr_t tid, int opts, const char *file,
 	all_time -= lockstat_nsecs(&sx->lock_object);
 	state = sx->sx_lock;
 #endif
-	for (;;) {
-		if (sx->sx_lock == SX_LOCK_UNLOCKED &&
-		    atomic_cmpset_acq_ptr(&sx->sx_lock, SX_LOCK_UNLOCKED, tid))
-			break;
+	while (!atomic_cmpset_acq_ptr(&sx->sx_lock, SX_LOCK_UNLOCKED, tid)) {
 #ifdef KDTRACE_HOOKS
 		spin_cnt++;
 #endif

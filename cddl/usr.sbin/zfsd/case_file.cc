@@ -83,6 +83,7 @@ using std::setfill;
 using std::setw;
 
 using DevdCtl::Event;
+using DevdCtl::EventBuffer;
 using DevdCtl::EventFactory;
 using DevdCtl::EventList;
 using DevdCtl::Guid;

@@ -669,7 +669,7 @@ getresponse(
 				printf("Received sequence numbers");
 				for (n = 0; n <= MAXSEQ; n++)
 				    if (haveseq[n])
-					printf(" %zd,", (size_t)n);
+					printf(" %zd,", n);
 				if (lastseq != 999)
 				    printf(" last frame received\n");
 				else
@@ -691,7 +691,7 @@ getresponse(
 	 */
 	if (n < (ssize_t)RESP_HEADER_SIZE) {
 		if (debug)
-			printf("Short (%zd byte) packet received\n", (size_t)n);
+			printf("Short (%zd byte) packet received\n", n);
 		goto again;
 	}
 	if (INFO_VERSION(rpkt.rm_vn_mode) > NTP_VERSION ||

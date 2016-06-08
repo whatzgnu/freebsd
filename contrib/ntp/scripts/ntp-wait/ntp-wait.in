@@ -33,7 +33,7 @@ sub run {
         }
 
         if (!exists $info->{status_line}{leap}) {
-            print "\bLeap status not available\n";
+            print "\bLeap status not avalaible\n";
             return 1;
         }
 

@@ -728,8 +728,8 @@ tcp_init(void)
 }
 
 #ifdef VIMAGE
-static void
-tcp_destroy(void *unused __unused)
+void
+tcp_destroy(void)
 {
 	int error;
 
@@ -772,7 +772,6 @@ tcp_destroy(void *unused __unused)
 		    HHOOK_TYPE_TCP, HHOOK_TCP_EST_OUT, error);
 	}
 }
-VNET_SYSUNINIT(tcp, SI_SUB_PROTO_DOMAIN, SI_ORDER_FOURTH, tcp_destroy, NULL);
 #endif
 
 void

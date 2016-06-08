@@ -959,9 +959,6 @@ vnet_epair_init(const void *unused __unused)
 
 	V_epair_cloner = if_clone_advanced(epairname, 0,
 	    epair_clone_match, epair_clone_create, epair_clone_destroy);
-#ifdef VIMAGE
-	netisr_register_vnet(&epair_nh);
-#endif
 }
 VNET_SYSINIT(vnet_epair_init, SI_SUB_PROTO_IFATTACHDOMAIN, SI_ORDER_ANY,
     vnet_epair_init, NULL);
@@ -970,9 +967,6 @@ static void
 vnet_epair_uninit(const void *unused __unused)
 {
 
-#ifdef VIMAGE
-	netisr_unregister_vnet(&epair_nh);
-#endif
 	if_clone_detach(V_epair_cloner);
 }
 VNET_SYSUNINIT(vnet_epair_uninit, SI_SUB_PROTO_IFATTACHDOMAIN, SI_ORDER_ANY,

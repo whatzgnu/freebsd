@@ -56,7 +56,7 @@ __FBSDID("$FreeBSD$");
  *	 NULL on failure
  */
 extern DBM *
-dbm_open(const char *file, int flags, mode_t mode)
+dbm_open(const char *file, int flags, int mode)
 {
 	HASHINFO info;
 	char path[MAXPATHLEN];

@@ -113,14 +113,11 @@ extern u_char	ether_ipmulticast_min[ETHER_ADDR_LEN];
 extern u_char	ether_ipmulticast_max[ETHER_ADDR_LEN];
 
 struct ifaddr;
-struct llentry;
 
 int	arpresolve_addr(struct ifnet *ifp, int flags,
-	    const struct sockaddr *dst, char *desten, uint32_t *pflags,
-	    struct llentry **plle);
+	    const struct sockaddr *dst, char *desten, uint32_t *pflags);
 int	arpresolve(struct ifnet *ifp, int is_gw, struct mbuf *m,
-	    const struct sockaddr *dst, u_char *desten, uint32_t *pflags,
-	    struct llentry **plle);
+	    const struct sockaddr *dst, u_char *desten, uint32_t *pflags);
 void	arprequest(struct ifnet *, const struct in_addr *,
 	    const struct in_addr *, u_char *);
 void	arp_ifinit(struct ifnet *, struct ifaddr *);

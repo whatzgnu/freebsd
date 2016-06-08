@@ -419,9 +419,7 @@ __mtx_lock_sleep(volatile uintptr_t *c, uintptr_t tid, int opts,
 	all_time -= lockstat_nsecs(&m->lock_object);
 #endif
 
-	for (;;) {
-		if (m->mtx_lock == MTX_UNOWNED && _mtx_obtain_lock(m, tid))
-			break;
+	while (!_mtx_obtain_lock(m, tid)) {
 #ifdef KDTRACE_HOOKS
 		spin_cnt++;
 #endif
@@ -604,9 +602,8 @@ _mtx_lock_spin_cookie(volatile uintptr_t *c, uintptr_t tid, int opts,
 #ifdef KDTRACE_HOOKS
 	spin_time -= lockstat_nsecs(&m->lock_object);
 #endif
-	for (;;) {
-		if (m->mtx_lock == MTX_UNOWNED && _mtx_obtain_lock(m, tid))
-			break;
+	while (!_mtx_obtain_lock(m, tid)) {
+
 		/* Give interrupts a chance while we spin. */
 		spinlock_exit();
 		while (m->mtx_lock != MTX_UNOWNED) {
@@ -678,9 +675,7 @@ retry:
 			    m->lock_object.lo_name, file, line));
 		WITNESS_CHECKORDER(&m->lock_object,
 		    opts | LOP_NEWORDER | LOP_EXCLUSIVE, file, line, NULL);
-		for (;;) {
-			if (m->mtx_lock == MTX_UNOWNED && _mtx_obtain_lock(m, tid))
-				break;
+		while (!_mtx_obtain_lock(m, tid)) {
 			if (m->mtx_lock == tid) {
 				m->mtx_recurse++;
 				break;

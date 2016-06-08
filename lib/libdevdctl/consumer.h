@@ -44,6 +44,8 @@ namespace DevdCtl
 
 /*=========================== Forward Declarations ===========================*/
 class Event;
+class EventBuffer;
+class FDReader;
 
 /*============================ Class Declarations ============================*/
 /*----------------------------- DevdCtl::Consumer ----------------------------*/
@@ -136,6 +138,16 @@ protected:
 	 * connection with devd.
 	 */
 	int                m_devdSockFD;
+
+	/**
+	 * Reader tied to the devd socket.
+	 */
+	FDReader	  *m_reader;
+
+	/**
+	 * Default EventBuffer connected to m_reader.
+	 */
+	EventBuffer	  *m_eventBuffer;
 
 	EventFactory	   m_eventFactory;
 

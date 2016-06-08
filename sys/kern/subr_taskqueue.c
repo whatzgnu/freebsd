@@ -130,16 +130,14 @@ _taskqueue_create(const char *name, int mflags,
 	char *tq_name;
 
 	tq_name = malloc(TASKQUEUE_NAMELEN, M_TASKQUEUE, mflags | M_ZERO);
-	if (tq_name == NULL)
+	if (!tq_name)
 		return (NULL);
-
-	queue = malloc(sizeof(struct taskqueue), M_TASKQUEUE, mflags | M_ZERO);
-	if (queue == NULL) {
-		free(tq_name, M_TASKQUEUE);
-		return (NULL);
-	}
 
 	snprintf(tq_name, TASKQUEUE_NAMELEN, "%s", (name) ? name : "taskqueue");
+
+	queue = malloc(sizeof(struct taskqueue), M_TASKQUEUE, mflags | M_ZERO);
+	if (!queue)
+		return (NULL);
 
 	STAILQ_INIT(&queue->tq_queue);
 	TAILQ_INIT(&queue->tq_active);

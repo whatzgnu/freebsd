@@ -97,8 +97,8 @@ get_char(FILE *cfile)
 				cur_line = line2;
 				prev_line = line1;
 			} else {
-				cur_line = line1;
-				prev_line = line2;
+				cur_line = line2;
+				prev_line = line1;
 			}
 			line++;
 			lpos = 1;

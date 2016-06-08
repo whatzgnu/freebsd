@@ -35,7 +35,6 @@ __FBSDID("$FreeBSD$");
 #ifdef _PTHREAD_FORCED_UNWIND
 #include <dlfcn.h>
 #endif
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -173,28 +172,15 @@ thread_unwind(void)
 #endif
 
 void
-_thread_exitf(const char *fname, int lineno, const char *fmt, ...)
-{
-	va_list ap;
-
-	/* Write an error message to the standard error file descriptor: */
-	_thread_printf(STDERR_FILENO, "Fatal error '");
-
-	va_start(ap, fmt);
-	_thread_vprintf(STDERR_FILENO, fmt, ap);
-	va_end(ap);
-
-	_thread_printf(STDERR_FILENO, "' at line %d in file %s (errno = %d)\n",
-	    lineno, fname, errno);
-
-	abort();
-}
-
-void
 _thread_exit(const char *fname, int lineno, const char *msg)
 {
 
-	_thread_exitf(fname, lineno, "%s", msg);
+	/* Write an error message to the standard error file descriptor: */
+	_thread_printf(2,
+	    "Fatal error '%s' at line %d in file %s (errno = %d)\n",
+	    msg, lineno, fname, errno);
+
+	abort();
 }
 
 void
@@ -209,10 +195,13 @@ _pthread_exit_mask(void *status, sigset_t *mask)
 	struct pthread *curthread = _get_curthread();
 
 	/* Check if this thread is already in the process of exiting: */
-	if (curthread->cancelling)
-		PANIC("Thread %p has called "
+	if (curthread->cancelling) {
+		char msg[128];
+		snprintf(msg, sizeof(msg), "Thread %p has called "
 		    "pthread_exit() from a destructor. POSIX 1003.1 "
 		    "1996 s16.2.5.2 does not allow this!", curthread);
+		PANIC(msg);
+	}
 
 	/* Flag this thread as exiting. */
 	curthread->cancelling = 1;
@@ -309,7 +298,7 @@ exit_thread(void)
 
 #if defined(_PTHREADS_INVARIANTS)
 	if (THR_IN_CRITICAL(curthread))
-		PANIC("thread %p exits with resources held!", curthread);
+		PANIC("thread exits with resources held!");
 #endif
 	/*
 	 * Kernel will do wakeup at the address, so joiner thread

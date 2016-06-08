@@ -93,10 +93,6 @@ __FBSDID("$FreeBSD$");
 #include <security/pam_appl.h>
 #endif
 
-#ifdef USE_BLACKLIST
-#include "blacklist_client.h"
-#endif
-
 #include "pathnames.h"
 #include "extern.h"
 
@@ -644,9 +640,6 @@ gotchild:
 		reply(220, "%s FTP server (%s) ready.", hostname, version);
 	else
 		reply(220, "FTP server ready.");
-#ifdef USE_BLACKLIST
-	blacklist_init();
-#endif
 	for (;;)
 		(void) yyparse();
 	/* NOTREACHED */
@@ -1422,9 +1415,6 @@ skip:
 		 */
 		if (rval) {
 			reply(530, "Login incorrect.");
-#ifdef USE_BLACKLIST
-			blacklist_notify(1, 0, "Login incorrect");
-#endif
 			if (logging) {
 				syslog(LOG_NOTICE,
 				    "FTP LOGIN FAILED FROM %s",
@@ -1442,11 +1432,6 @@ skip:
 			}
 			return;
 		}
-#ifdef USE_BLACKLIST
-		 else {
-			blacklist_notify(0, 0, "Login successful");
-		}
-#endif
 	}
 	login_attempts = 0;		/* this time successful */
 	if (setegid(pw->pw_gid) < 0) {

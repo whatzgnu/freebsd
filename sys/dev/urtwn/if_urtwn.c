@@ -2627,11 +2627,10 @@ urtwn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		if (ic->ic_promisc == 0) {
 			reg = urtwn_read_4(sc, R92C_RCR);
 
-			if (vap->iv_opmode != IEEE80211_M_HOSTAP) {
+			if (vap->iv_opmode != IEEE80211_M_HOSTAP)
 				reg |= R92C_RCR_CBSSID_DATA;
-				if (vap->iv_opmode != IEEE80211_M_IBSS)
-					reg |= R92C_RCR_CBSSID_BCN;
-			}
+			if (vap->iv_opmode != IEEE80211_M_IBSS)
+				reg |= R92C_RCR_CBSSID_BCN;
 
 			urtwn_write_4(sc, R92C_RCR, reg);
 		}
@@ -2956,7 +2955,8 @@ urtwn_tx_data(struct urtwn_softc *sc, struct ieee80211_node *ni,
 				switch (ic->ic_protmode) {
 				case IEEE80211_PROT_CTSONLY:
 					txd->txdw4 |= htole32(
-					    R92C_TXDW4_CTS2SELF);
+					    R92C_TXDW4_CTS2SELF |
+					    R92C_TXDW4_HWRTSEN);
 					break;
 				case IEEE80211_PROT_RTSCTS:
 					txd->txdw4 |= htole32(
@@ -3117,10 +3117,11 @@ urtwn_tx_raw(struct urtwn_softc *sc, struct ieee80211_node *ni,
 		    params->ibp_try0));
 	}
 	if (params->ibp_flags & IEEE80211_BPF_RTS)
-		txd->txdw4 |= htole32(R92C_TXDW4_RTSEN | R92C_TXDW4_HWRTSEN);
+		txd->txdw4 |= htole32(R92C_TXDW4_RTSEN);
 	if (params->ibp_flags & IEEE80211_BPF_CTS)
 		txd->txdw4 |= htole32(R92C_TXDW4_CTS2SELF);
 	if (txd->txdw4 & htole32(R92C_TXDW4_RTSEN | R92C_TXDW4_CTS2SELF)) {
+		txd->txdw4 |= htole32(R92C_TXDW4_HWRTSEN);
 		txd->txdw4 |= htole32(SM(R92C_TXDW4_RTSRATE,
 		    URTWN_RIDX_OFDM24));
 	}
@@ -4722,8 +4723,7 @@ urtwn_scan_start(struct ieee80211com *ic)
 
 	URTWN_LOCK(sc);
 	/* Receive beacons / probe responses from any BSSID. */
-	if (ic->ic_opmode != IEEE80211_M_IBSS &&
-	    ic->ic_opmode != IEEE80211_M_HOSTAP)
+	if (ic->ic_opmode != IEEE80211_M_IBSS)
 		urtwn_set_rx_bssid_all(sc, 1);
 
 	/* Set gain for scanning. */
@@ -4738,9 +4738,7 @@ urtwn_scan_end(struct ieee80211com *ic)
 
 	URTWN_LOCK(sc);
 	/* Restore limitations. */
-	if (ic->ic_promisc == 0 &&
-	    ic->ic_opmode != IEEE80211_M_IBSS &&
-	    ic->ic_opmode != IEEE80211_M_HOSTAP)
+	if (ic->ic_promisc == 0 && ic->ic_opmode != IEEE80211_M_IBSS)
 		urtwn_set_rx_bssid_all(sc, 0);
 
 	/* Set gain under link. */
@@ -4933,12 +4931,13 @@ urtwn_set_promisc(struct urtwn_softc *sc)
 	if (vap->iv_state == IEEE80211_S_RUN) {
 		switch (vap->iv_opmode) {
 		case IEEE80211_M_STA:
-			mask2 |= R92C_RCR_CBSSID_BCN;
+			mask2 |= R92C_RCR_CBSSID_DATA;
 			/* FALLTHROUGH */
+		case IEEE80211_M_HOSTAP:
+			mask2 |= R92C_RCR_CBSSID_BCN;
+			break;
 		case IEEE80211_M_IBSS:
 			mask2 |= R92C_RCR_CBSSID_DATA;
-			break;
-		case IEEE80211_M_HOSTAP:
 			break;
 		default:
 			device_printf(sc->sc_dev, "%s: undefined opmode %d\n",

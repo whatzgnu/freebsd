@@ -211,7 +211,7 @@ logname(KINFO *k, VARENT *ve __unused)
 char *
 state(KINFO *k, VARENT *ve __unused)
 {
-	long flag, tdflags;
+	int flag, tdflags;
 	char *cp, *buf;
 
 	buf = malloc(16);
