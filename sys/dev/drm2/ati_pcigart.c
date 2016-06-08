@@ -31,10 +31,10 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+#include <linux/export.h>
+#include <drm/drmP.h>
 
-#include <dev/drm2/drmP.h>
+#include <drm/ati_pcigart.h>
 
 # define ATI_PCIGART_PAGE_SIZE		4096	/**< PCI GART page size */
 
@@ -42,7 +42,7 @@ static int drm_ati_alloc_pcigart_table(struct drm_device *dev,
 				       struct drm_ati_pcigart_info *gart_info)
 {
 	gart_info->table_handle = drm_pci_alloc(dev, gart_info->table_size,
-						PAGE_SIZE, BUS_SPACE_MAXADDR);
+						PAGE_SIZE);
 	if (gart_info->table_handle == NULL)
 		return -ENOMEM;
 

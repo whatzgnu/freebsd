@@ -650,7 +650,7 @@ vnode_locked:
 			 * that it may bring up surrounding pages.
 			 */
 			rv = vm_pager_get_pages(fs.object, &fs.m, 1,
-			    &behind, &ahead);
+			     &behind, &ahead, fault_type);
 			if (rv == VM_PAGER_OK) {
 				faultcount = behind + 1 + ahead;
 				hardfault++;

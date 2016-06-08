@@ -70,7 +70,14 @@
 #include <vm/vm_object.h>
 #include <vm/pmap.h>
 
+/* CEM: TODO: Port some of the queue(9) invariants? */
+
 #define	prefetch(x)
+
+#define LINUX_LIST_HEAD_INIT(name) { &(name), &(name) }
+
+#define LINUX_LIST_HEAD(name) \
+	struct list_head name = LINUX_LIST_HEAD_INIT(name)
 
 struct list_head {
 	struct list_head *next;
@@ -89,6 +96,15 @@ list_empty(const struct list_head *head)
 {
 
 	return (head->next == head);
+}
+
+
+static inline int
+list_empty_careful(const struct list_head *head)
+{
+	struct list_head *next = head->next;
+
+	return ((next == head) && (next == head->prev));
 }
 
 static inline void
@@ -119,6 +135,9 @@ static inline void
 linux_list_add(struct list_head *new, struct list_head *prev,
     struct list_head *next)
 {
+	MPASS(new != NULL);
+	MPASS(prev != NULL);
+	MPASS(next != NULL);
 
 	next->prev = new;
 	new->next = next;

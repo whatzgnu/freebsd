@@ -35,7 +35,9 @@
 #include <sys/lock.h>
 #include <sys/sx.h>
 
+#include <linux/list.h>
 #include <linux/spinlock.h>
+#include <linux/lockdep.h>
 
 typedef struct mutex {
 	struct sx sx;
@@ -43,22 +45,39 @@ typedef struct mutex {
 
 #define	mutex_lock(_m)			sx_xlock(&(_m)->sx)
 #define	mutex_lock_nested(_m, _s)	mutex_lock(_m)
-#define	mutex_lock_interruptible(_m)	({ mutex_lock((_m)); 0; })
+#define mutex_lock_nest_lock(_m, _s)	mutex_lock(_m)
+#define	mutex_lock_interruptible(_m)	({ int ret = sx_xlock_sig(&(_m)->sx); ret ? -EINTR : 0; })
 #define	mutex_unlock(_m)		sx_xunlock(&(_m)->sx)
 #define	mutex_trylock(_m)		!!sx_try_xlock(&(_m)->sx)
+#define	mutex_is_locked(_m)		sx_xlocked(&(_m)->sx)
 
 #define DEFINE_MUTEX(lock)						\
 	mutex_t lock;							\
-	SX_SYSINIT_FLAGS(lock, &(lock).sx, "lnxmtx", SX_NOWITNESS)
+	SX_SYSINIT_FLAGS(lock, &(lock).sx, #lock, SX_DUPOK)
+
+
+
 
 static inline void
-linux_mutex_init(mutex_t *m)
+linux_mutex_init(mutex_t *m, const char *name, int flags)
 {
 
 	memset(&m->sx, 0, sizeof(m->sx));
-	sx_init_flags(&m->sx, "lnxmtx",  SX_NOWITNESS);
+	sx_init_flags(&m->sx, name,  flags);
 }
 
-#define	mutex_init(m)	linux_mutex_init(m)
+struct ww_acquire_ctx;
+
+int linux_mutex_lock_common(struct mutex *m, int state, struct ww_acquire_ctx *ctx);
+
+
+static inline void
+linux_mutex_destroy(mutex_t *m)
+{
+	sx_destroy(&m->sx);
+}
+
+#define	mutex_init(m)	linux_mutex_init(m, #m, SX_DUPOK)
+#define mutex_destroy(m) linux_mutex_destroy(m);
 
 #endif	/* _LINUX_MUTEX_H_ */

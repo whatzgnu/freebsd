@@ -41,11 +41,10 @@
 
 MALLOC_DECLARE(M_KMALLOC);
 
-#define	kmalloc(size, flags)		malloc((size), M_KMALLOC, (flags))
+#define	kmalloc(size, flags)		malloc((size), M_KMALLOC, (flags) ? (flags) : M_NOWAIT)
 #define	kvmalloc(size)			kmalloc((size), 0)
-#define	kzalloc(size, flags)		kmalloc((size), (flags) | M_ZERO)
+#define	kzalloc(size, flags)		kmalloc((size), ((flags) ? (flags) : M_NOWAIT) | M_ZERO)
 #define	kzalloc_node(size, flags, node)	kzalloc(size, flags)
-#define	kfree(ptr)			free(__DECONST(void *, (ptr)), M_KMALLOC)
 #define	kfree_const(ptr)		kfree(ptr)
 #define	krealloc(ptr, size, flags)	realloc((ptr), (size), M_KMALLOC, (flags))
 #define	kcalloc(n, size, flags)	        kmalloc((n) * (size), flags | M_ZERO)
@@ -54,6 +53,21 @@ MALLOC_DECLARE(M_KMALLOC);
 #define	kvfree(arg)			kfree(arg)
 #define	vmalloc(size)                   kmalloc(size, GFP_KERNEL)
 #define	vmalloc_node(size, node)        kmalloc(size, GFP_KERNEL)
+#define	vmalloc_user(size)              kmalloc(size, GFP_KERNEL | __GFP_ZERO)
+#define __kmalloc			kmalloc
+
+/**
+ * kmalloc_array - allocate memory for an array.
+ * @n: number of elements.
+ * @size: element size.
+ * @flags: the type of memory to allocate (see kmalloc).
+ */
+static inline void *kmalloc_array(size_t n, size_t size, gfp_t flags)
+{
+	if (size != 0 && n > SIZE_MAX / size)
+		return NULL;
+	return __kmalloc(n * size, flags);
+}
 
 struct kmem_cache {
 	uma_zone_t	cache_zone;
@@ -61,6 +75,13 @@ struct kmem_cache {
 };
 
 #define	SLAB_HWCACHE_ALIGN	0x0001
+
+static inline void
+kfree(const void *ptr)
+{
+
+	free(__DECONST(void *, ptr), M_KMALLOC);
+}
 
 static inline int
 kmem_ctor(void *mem, int size, void *arg, int flags)
@@ -95,6 +116,12 @@ static inline void *
 kmem_cache_alloc(struct kmem_cache *c, int flags)
 {
 	return uma_zalloc_arg(c->cache_zone, c->cache_ctor, flags);
+}
+
+static inline void *
+kmem_cache_zalloc(struct kmem_cache *c, int flags)
+{
+	return uma_zalloc_arg(c->cache_zone, c->cache_ctor, flags|M_ZERO);
 }
 
 static inline void

@@ -37,12 +37,14 @@
 #include <sys/mutex.h>
 
 #include <linux/compiler.h>
+#include <linux/irqflags.h>
 #include <linux/kernel.h>
 #include <linux/rwlock.h>
 
 typedef struct {
 	struct mtx m;
 } spinlock_t;
+
 
 #define	spin_lock(_l)		mtx_lock(&(_l)->m)
 #define	spin_unlock(_l)		mtx_unlock(&(_l)->m)
@@ -63,8 +65,43 @@ spin_lock_init(spinlock_t *lock)
 	mtx_init(&lock->m, "lnxspin", NULL, MTX_DEF | MTX_NOWITNESS);
 }
 
+static inline void
+spin_lock_destroy(spinlock_t *lock)
+{
+	mtx_destroy(&lock->m);
+}
+
+
 #define	DEFINE_SPINLOCK(lock)						\
 	spinlock_t lock;						\
 	MTX_SYSINIT(lock, &(lock).m, "lnxspin", MTX_DEF)
+
+
+static inline void
+assert_spin_locked(spinlock_t *lock)
+{
+	mtx_assert(&lock->m, MA_OWNED);
+}
+
+static inline void spin_lock_bh(spinlock_t *lock) {
+	critical_enter();
+	spin_lock(lock);
+}
+static inline void spin_unlock_bh(spinlock_t *lock) {
+	spin_unlock(lock);
+	critical_exit();
+}
+
+#define local_irq_save(flags)			\
+	do {					\
+		flags = 1;			\
+		critical_enter();		\
+	} while (0)
+
+#define local_irq_restore(flags)		\
+	do {					\
+		flags = 0;			\
+		critical_exit();		\
+	} while (0)
 
 #endif	/* _LINUX_SPINLOCK_H_ */

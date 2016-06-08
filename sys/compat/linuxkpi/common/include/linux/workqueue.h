@@ -36,9 +36,38 @@
 #include <linux/timer.h>
 #include <linux/slab.h>
 
-#include <asm/atomic.h>
+#include <linux/atomic.h>
 
 #include <sys/taskqueue.h>
+
+#define work_data_bits(work) ((unsigned long *)(&(work)->data))
+
+enum {
+	WORK_STRUCT_PENDING_BIT	= 0,	/* work item is pending execution */	
+	WORK_BUSY_PENDING	= 1 << 0,
+	WORK_BUSY_RUNNING	= 1 << 1,
+	WORK_STRUCT_PENDING	= 1 << WORK_STRUCT_PENDING_BIT,
+
+	WORK_STRUCT_COLOR_SHIFT	= 4,	/* color for workqueue flushing */
+	WORK_OFFQ_FLAG_BASE	= WORK_STRUCT_COLOR_SHIFT,
+	WORK_OFFQ_FLAG_BITS	= 1,
+	WORK_OFFQ_POOL_SHIFT	= WORK_OFFQ_FLAG_BASE + WORK_OFFQ_FLAG_BITS,
+	WORK_OFFQ_LEFT		= BITS_PER_LONG - WORK_OFFQ_POOL_SHIFT,
+	WORK_OFFQ_POOL_BITS	= WORK_OFFQ_LEFT <= 31 ? WORK_OFFQ_LEFT : 31,
+	WORK_OFFQ_POOL_NONE	= (1LU << WORK_OFFQ_POOL_BITS) - 1,
+	WORK_STRUCT_NO_POOL	= (unsigned long)WORK_OFFQ_POOL_NONE << WORK_OFFQ_POOL_SHIFT,
+
+};
+
+enum {
+	WQ_UNBOUND		= 1 << 1, /* not bound to any cpu */
+	WQ_HIGHPRI		= 1 << 4, /* high priority */
+	WQ_MAX_ACTIVE		= 512,	  /* I like 512, better ideas? */
+	WQ_MAX_UNBOUND_PER_CPU	= 4,	  /* 4 * #cpus for unbound wq */
+};
+
+#define WQ_UNBOUND_MAX_ACTIVE	\
+	max_t(int, WQ_MAX_ACTIVE, mp_ncpus * WQ_MAX_UNBOUND_PER_CPU)
 
 struct workqueue_struct {
 	struct taskqueue	*taskqueue;
@@ -46,10 +75,23 @@ struct workqueue_struct {
 };
 
 struct work_struct {
+	atomic_long_t data;
 	struct	task 		work_task;
 	struct	taskqueue	*taskqueue;
 	void			(*fn)(struct work_struct *);
 };
+
+#define WORK_DATA_INIT()	ATOMIC_LONG_INIT(WORK_STRUCT_NO_POOL)
+#define WORK_DATA_STATIC_INIT()	\
+	ATOMIC_LONG_INIT(WORK_STRUCT_NO_POOL | WORK_STRUCT_STATIC)
+
+
+#define LINUX_WORK_INITIALIZER(n, f) {					\
+	.data = WORK_DATA_STATIC_INIT(),				\
+	}
+
+#define DECLARE_WORK(n, f)						\
+	struct work_struct n = LINUX_WORK_INITIALIZER(n, f);
 
 typedef __typeof(((struct work_struct *)0)->fn) work_func_t;
 
@@ -57,6 +99,15 @@ struct delayed_work {
 	struct work_struct	work;
 	struct callout		timer;
 };
+
+extern struct workqueue_struct *system_wq;
+extern struct workqueue_struct *system_highpri_wq;
+extern struct workqueue_struct *system_long_wq;
+extern struct workqueue_struct *system_unbound_wq;
+extern struct workqueue_struct *system_freezable_wq;
+extern struct workqueue_struct *system_power_efficient_wq;
+extern struct workqueue_struct *system_freezable_power_efficient_wq;
+
 
 extern void linux_work_fn(void *, int);
 extern void linux_flush_fn(void *, int);
@@ -75,7 +126,8 @@ to_delayed_work(struct work_struct *work)
 do {									\
 	(work)->fn = (func);						\
 	(work)->taskqueue = NULL;					\
-	TASK_INIT(&(work)->work_task, 0, linux_work_fn, (work));		\
+	(work)->data = (atomic_long_t) WORK_DATA_INIT();		\
+	TASK_INIT(&(work)->work_task, 0, linux_work_fn, (work));	\
 } while (0)
 
 #define	INIT_DELAYED_WORK(_work, func)					\
@@ -93,6 +145,10 @@ do {									\
 } while (0)
 
 #define	flush_scheduled_work()	flush_taskqueue(taskqueue_thread)
+
+#define work_pending(work) \
+	test_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))
+
 
 static inline int
 queue_work(struct workqueue_struct *wq, struct work_struct *work)
@@ -213,4 +269,50 @@ mod_delayed_work(struct workqueue_struct *wq, struct delayed_work *dwork,
 	return false;
 }
 
+
+static inline bool
+flush_work(struct work_struct *work)
+{
+
+	if (work->taskqueue == NULL)
+		work->taskqueue = taskqueue_thread;
+
+	flush_taskqueue(work->taskqueue);
+	return (true);
+}
+
+static inline bool
+flush_delayed_work(struct delayed_work *work)
+{
+	if (work->work.taskqueue == NULL)
+		work->work.taskqueue = taskqueue_thread;
+
+	flush_taskqueue(work->work.taskqueue);
+	return (true);
+}
+
+static inline unsigned int
+work_busy(struct work_struct *work)
+{
+	struct task *ta;
+	struct taskqueue *tq;
+	int rc;
+
+	DODGY();
+	rc = 0;
+	ta = &work->work_task;
+	tq = work->taskqueue;
+
+	if (ta->ta_pending)
+		rc |= WORK_BUSY_PENDING;
+	/*
+	 * There's currently no interface to query if a task running
+	 */
+#ifdef notyet
+	if (tq != NULL) {
+
+	}
+#endif	
+	return (rc);
+}
 #endif	/* _LINUX_WORKQUEUE_H_ */

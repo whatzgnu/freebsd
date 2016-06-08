@@ -31,9 +31,14 @@
 #ifndef	_LINUX_COMPAT_H_
 #define	_LINUX_COMPAT_H_
 
+#define oops_in_progress (panicstr != NULL)
+#define preempt_disable() critical_enter()
+#define preempt_enable() critical_exit()
+
 struct thread;
 struct task_struct;
 
+extern void *compat_alloc_user_space(unsigned long len);
 void linux_set_current(struct thread *td, struct task_struct *t);
 void linux_clear_current(struct thread *td);
 
