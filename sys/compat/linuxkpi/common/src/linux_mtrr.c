@@ -71,7 +71,7 @@ mtrr_add(unsigned long offset, unsigned long size, int flags)
 	rc = mem_range_attr_set(&mrdesc, &act);
 
 	/* there's no way to get the actual register without churning the interface */
-	return (rc ? -rc : (int)offset);
+	return (rc ? -rc : 0);
 }
 
 static int
@@ -98,8 +98,9 @@ arch_phys_wc_add(unsigned long base, unsigned long size)
 	mi->base = base;
 	mi->size = size;
 	rc  = mtrr_add(base, size, MTRR_TYPE_WRCOMB);
-	if (rc > 0) {
+	if (rc >= 0) {
 		rc2 = idr_get_new(&mtrr_idr, mi, &id);
+		MPASS(idr_find(&mtrr_idr, id) == mi);
 		MPASS(rc2 == 0);
 	} else {
 		free(mi, M_LKMTRR);

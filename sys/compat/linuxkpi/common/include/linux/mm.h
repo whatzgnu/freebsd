@@ -76,7 +76,7 @@ struct vm_area_struct {
 	vm_offset_t	vm_pgoff;
 	vm_paddr_t	vm_pfn;		/* PFN For mmap. */
 	vm_size_t	vm_len;		/* length for mmap. */
-	vm_memattr_t	vm_page_prot;
+	pgprot_t	vm_page_prot;
 	unsigned long vm_flags;		/* Flags, see mm.h. */
 	struct mm_struct *vm_mm;	/* The address space we belong to. */
 	void * vm_private_data;		/* was vm_pte (shared mem) */
@@ -197,11 +197,8 @@ vm_get_page_prot(unsigned long vm_flags)
 	return (vm_flags & VM_PROT_ALL);
 }
 
-static inline int
-vm_insert_mixed(struct vm_area_struct *vma, unsigned long addr, pfn_t pfn)
-{
-	panic("XXX implement me!!!");
-}
+
+int vm_insert_mixed(struct vm_area_struct *vma, unsigned long addr, pfn_t pfn);
 
 void vma_set_page_prot(struct vm_area_struct *vma);
 

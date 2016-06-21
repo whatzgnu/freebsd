@@ -60,7 +60,7 @@ ww_mutex_trylock(struct ww_mutex *lock)
 static inline int
 ww_mutex_lock(struct ww_mutex *lock, struct ww_acquire_ctx *ctx)
 {
-	if (mutex_is_locked(&lock->base))
+	if (mutex_is_owned(&lock->base))
 		return (-EALREADY);
 	if (ctx)
 		return (linux_mutex_lock_common(&lock->base, TASK_UNINTERRUPTIBLE, ctx));
@@ -109,10 +109,18 @@ ww_acquire_init(struct ww_acquire_ctx *ctx, struct ww_class *ww_class)
 	ctx->acquired = 0;
 }
 
+
+#define ww_mutex_init(lock, class) _ww_mutex_init((lock), (class), __FILE__, __LINE__)
+
 static inline void
-ww_mutex_init(struct ww_mutex *lock, struct ww_class *ww_class)
+_ww_mutex_init(struct ww_mutex *lock, struct ww_class *ww_class, char *file, int line)
 {
-	linux_mutex_init(&lock->base, ww_class->mutex_name, SX_NOWITNESS);
+#ifdef WITNESS_ALL
+	linux_mutex_init(&lock->base, ww_class->mutex_name, SX_DUPOK, file, line);
+#else
+	linux_mutex_init(&lock->base, ww_class->mutex_name, SX_NOWITNESS, NULL, 0);
+#endif	
+	
 }
 
 static inline void

@@ -357,6 +357,7 @@ device		netmap			# netmap(4) support
 # The crypto framework is required by IPSEC
 device		crypto			# Required by IPSEC
 
+<<<<<<< HEAD
 # Enable ALTQ
 options ALTQ
 options ALTQ_CBQ # Class Based Queuing (CBQ)
@@ -365,3 +366,6 @@ options ALTQ_RIO # RED In/Out
 options ALTQ_HFSC # Hierarchical Packet Scheduler (HFSC)
 options ALTQ_PRIQ # Priority Queuing (PRIQ)
 options ALTQ_NOPCC # Required for SMP build
+=======
+options		SW_WATCHDOG
+>>>>>>> bfa38c54aeb4e54b57360e3232c90d234d2f7a01

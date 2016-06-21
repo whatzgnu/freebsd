@@ -66,7 +66,7 @@
 #define	GFP_IOFS	M_NOWAIT
 #define	GFP_NOIO	M_NOWAIT
 #define	GFP_DMA32	0
-#define	GFP_TEMPORARY	0
+#define	GFP_TEMPORARY	M_NOWAIT
 
 static inline void *
 page_address(struct page *page)
@@ -148,19 +148,6 @@ free_pages(uintptr_t addr, unsigned int order)
 #define free_page(addr) free_pages((addr), 0)
 
 
-
-extern int linux_db_trace;
-#ifdef DDB
-extern void db_trace_self_depth(int);
-#define BACKTRACE()				\
-	do {					\
-		if (linux_db_trace)		\
-			db_trace_self_depth(5); \
-	} while (0);
-
-#else
-#define BACKTRACE()
-#endif
 /*
  * Alloc pages allocates directly from the buddy allocator on linux so
  * order specifies a power of two bucket of pages and the results
@@ -194,6 +181,13 @@ static inline uintptr_t __get_free_pages(gfp_t gfp_mask, unsigned int order)
 
 #define kmalloc_node(chunk, mask, node)         kmalloc(chunk, mask)
 
+/*
+ * XXX this actually translates to wired
+ *
+ * PG_reserved is set for special pages, which can never be swapped out. Some
+ * of them might not even exist (eg empty_bad_page)...
+ *
+ */
 #define	SetPageReserved(page)	do { } while (0)	/* NOP */
 #define	ClearPageReserved(page)	do { } while (0)	/* NOP */
 

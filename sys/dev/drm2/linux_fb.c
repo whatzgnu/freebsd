@@ -26,6 +26,10 @@ static int __unregister_framebuffer(struct linux_fb_info *fb_info);
 extern int vt_fb_attach(struct fb_info *info);
 extern void vt_fb_detach(struct fb_info *info);
 
+#include <sys/reboot.h>
+
+int skip_ddb;
+
 static void
 fb_info_print(struct fb_info *t)
 {
@@ -49,33 +53,37 @@ vt_restore_fbdev_mode(void *arg, int pending)
 {
 	struct drm_fb_helper *fb_helper;
 	struct vt_kms_softc *sc;
-	struct task_struct t, cur;
+	struct task_struct t;
 	struct mm_struct mm;
 
 	sc = (struct vt_kms_softc *)arg;
 	fb_helper = sc->fb_helper;
-	linux_set_current(curthread, &t);
+	linux_set_current();
 	drm_fb_helper_restore_fbdev_mode_unlocked(fb_helper);
-	linux_clear_current(curthread);
 }
 
 static int
 vt_kms_postswitch(void *arg)
 {
 	struct vt_kms_softc *sc;
-	struct task_struct t, *cur;
+	struct task_struct t;
 
 	sc = (struct vt_kms_softc *)arg;
 
 	if (!kdb_active && panicstr == NULL)
 		taskqueue_enqueue(taskqueue_thread, &sc->fb_mode_task);
 	else {
-		cur = current;
-		if (cur == NULL)
-			linux_set_current(curthread, &t);
+#ifdef DDB
+		db_trace_self_depth(10);
+		mdelay(1000);
+#endif
+		if (skip_ddb) {
+			spinlock_enter();
+			doadump(0);
+			EVENTHANDLER_INVOKE(shutdown_final, RB_NOSYNC);
+		}
+		linux_set_current();
 		drm_fb_helper_restore_fbdev_mode_unlocked(sc->fb_helper);
-		if (cur == NULL)
-			linux_clear_current(curthread);
 	}
 	return (0);
 }
@@ -260,10 +268,15 @@ framebuffer_alloc(size_t size, struct device *dev)
 void
 framebuffer_release(struct linux_fb_info *info)
 {
+	struct vt_kms_softc *sc;
+
 	if (info == NULL)
 		return;
-	if (info->fbio.fb_fbd_dev != NULL)
-		device_delete_child(info->fb_bsddev, info->fbio.fb_fbd_dev);
+	if (info->fbio.fb_priv) {
+		sc = info->fbio.fb_priv;
+		if (sc->fb_helper != NULL)
+			sc->fb_helper->fbdev = NULL;
+	}
 	kfree(info->apertures);
 	free(info, DRM_MEM_KMS);
 	free(info->fbio.fb_priv, DRM_MEM_KMS);
@@ -275,8 +288,6 @@ put_fb_info(struct linux_fb_info *fb_info)
 	if (!atomic_dec_and_test(&fb_info->count))
 		return;
 
-	mutex_destroy(&fb_info->lock);
-	mutex_destroy(&fb_info->mm_lock);
 	if (fb_info->fbops->fb_destroy)
 		fb_info->fbops->fb_destroy(fb_info);
 }
@@ -494,8 +505,8 @@ __register_framebuffer(struct linux_fb_info *fb_info)
 			break;
 	fb_info->node = i;
 	atomic_set(&fb_info->count, 1);
-	mutex_init(&fb_info->lock);
-	mutex_init(&fb_info->mm_lock);
+	mutex_init_nowitness(&fb_info->lock);
+	mutex_init_nowitness(&fb_info->mm_lock);
 
 	MPASS(fb_info->apertures->ranges[0].base);
 	MPASS(fb_info->apertures->ranges[0].size);
@@ -602,6 +613,7 @@ unlink_framebuffer(struct linux_fb_info *fb_info)
 static int
 __unregister_framebuffer(struct linux_fb_info *fb_info)
 {
+	struct vt_kms_softc *sc;
 	struct fb_event event;
 	int i, ret = 0;
 
@@ -609,12 +621,20 @@ __unregister_framebuffer(struct linux_fb_info *fb_info)
 	if (i < 0 || i >= FB_MAX || registered_fb[i] != fb_info)
 		return -EINVAL;
 
-
-	if (fb_info->fbio.fb_fbd_dev)
+	if (fb_info->fbio.fb_fbd_dev) {
+		mtx_lock(&Giant);
 		device_delete_child(fb_info->fb_bsddev, fb_info->fbio.fb_fbd_dev);
-
+		mtx_unlock(&Giant);
+		fb_info->fbio.fb_fbd_dev = NULL;
+	}
+	if (fb_info->fbio.fb_priv) {
+		sc = fb_info->fbio.fb_priv;
+		if (sc->fb_helper != NULL)
+			sc->fb_helper->fbdev = NULL;
+	}
 	if (num_registered_fb == 1)
 		vt_fb_detach(&fb_info->fbio);
+
 
 #if 0	
 	if (!lock_fb_info(fb_info))
@@ -643,7 +663,6 @@ __unregister_framebuffer(struct linux_fb_info *fb_info)
 	fb_notifier_call_chain(FB_EVENT_FB_UNREGISTERED, &event);
 	console_unlock();
 #endif
-	/* this may free fb info */
 	put_fb_info(fb_info);
 	return 0;
 }

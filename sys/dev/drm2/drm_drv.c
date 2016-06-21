@@ -45,7 +45,6 @@ unsigned int drm_debug = 0xffffffff;	/* bitmask of DRM_UT_x */
 unsigned int drm_debug = 0;	/* bitmask of DRM_UT_x */
 #endif
 
-int skip_ddb = 0;
 EXPORT_SYMBOL(drm_debug);
 
 MODULE_AUTHOR(CORE_AUTHOR);
@@ -76,8 +75,6 @@ void drm_err(const char *format, ...)
 }
 EXPORT_SYMBOL(drm_err);
 
-#include <sys/reboot.h>
-
 void drm_ut_debug_printk(const char *function_name, const char *format, ...)
 {
 	struct va_format vaf;
@@ -88,16 +85,8 @@ void drm_ut_debug_printk(const char *function_name, const char *format, ...)
 	vaf.fmt = format;
 	vaf.va = &args;
 
-	if (SCHEDULER_STOPPED()) {
+	if (SCHEDULER_STOPPED() || kdb_active) {
 		printf(" ");
-		if (stop_count++ == 12) {
-			BACKTRACE();
-			if (skip_ddb) {
-				spinlock_enter();
-				doadump(0);
-				EVENTHANDLER_INVOKE(shutdown_final, RB_NOSYNC);
-			}
-		}
 		return;
 	}
 	if (panicstr != NULL)
@@ -613,8 +602,8 @@ struct drm_device *drm_dev_alloc(struct drm_driver *driver,
 
 	spin_lock_init(&dev->buf_lock);
 	spin_lock_init(&dev->event_lock);
-	mutex_init(&dev->struct_mutex);
-	mutex_init(&dev->ctxlist_mutex);
+	mutex_init_nowitness(&dev->struct_mutex);
+	mutex_init_nowitness(&dev->ctxlist_mutex);
 	mutex_init(&dev->master_mutex);
 
 	dev->anon_inode = drm_fs_inode_new();
@@ -678,8 +667,6 @@ err_free:
 	mutex_destroy(&dev->master_mutex);
 	spin_lock_destroy(&dev->buf_lock);
 	spin_lock_destroy(&dev->event_lock);
-	mutex_destroy(&dev->struct_mutex);
-	mutex_destroy(&dev->ctxlist_mutex);
 
 	kfree(dev);
 	return NULL;
@@ -703,8 +690,6 @@ static void drm_dev_release(struct kref *ref)
 
 	spin_lock_destroy(&dev->buf_lock);
 	spin_lock_destroy(&dev->event_lock);
-	mutex_destroy(&dev->struct_mutex);
-	mutex_destroy(&dev->ctxlist_mutex);
 	mutex_destroy(&dev->master_mutex);
 	kfree(dev->unique);
 	kfree(dev);

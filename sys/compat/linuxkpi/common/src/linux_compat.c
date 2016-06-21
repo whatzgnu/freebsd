@@ -97,7 +97,8 @@ struct workqueue_struct *system_power_efficient_wq;
 SYSCTL_NODE(_compat, OID_AUTO, linuxkpi, CTLFLAG_RW, 0, "LinuxKPI parameters");
 int linux_db_trace;
 SYSCTL_INT(_compat_linuxkpi, OID_AUTO, db_trace, CTLFLAG_RWTUN, &linux_db_trace, 0, "enable backtrace instrumentation");
-
+int linux_skip_prefault;
+SYSCTL_INT(_compat_linuxkpi, OID_AUTO, dev_fault_skip_prefault, CTLFLAG_RWTUN, &linux_skip_prefault, 0, "disable faultahead");
 
 MALLOC_DEFINE(M_KMALLOC, "linux", "Linux kmalloc compat");
 MALLOC_DEFINE(M_LCINT, "linuxint", "Linux compat internal");
@@ -190,32 +191,40 @@ on_each_cpu(void callback(void *data), void *data, int wait)
 long
 schedule_timeout(signed long timeout)
 {
-	int ret, flags;
+	int ret, flags, sleepable;
 	struct mtx *m;
 	struct mtx stackm;
 
 	if (timeout < 0)
 		return 0;
-	if (SCHEDULER_STOPPED())
+	if (SKIP_SLEEP())
 		return (0);
 	MPASS(current);
+	sleepable = 0;
 	if (current->sleep_wq == NULL) {
 		m = &stackm;
 		bzero(m, sizeof(*m));
 		mtx_init(m, "stack", NULL, MTX_DEF|MTX_NOWITNESS);
 		mtx_lock(m);
+		sleepable = 1;
 	} else {
 		m = &current->sleep_wq->lock.m;
-		mtx_lock(m);
+		mtx_lock_spin(m);
 		if (current->state == TASK_WAKING) {
-			mtx_unlock(m);
+			mtx_unlock_spin(m);
 			set_current_state(TASK_RUNNING);
 			return (0);
 		}
 	}
 
 	flags = (current->state == TASK_INTERRUPTIBLE) ? PCATCH : 0;
-	ret = _sleep(current, &(m->lock_object), flags | PDROP , "lstimi", tick_sbt * timeout, 0 , C_HARDCLOCK);
+	if (sleepable)
+		ret = _sleep(current, &(m->lock_object), flags | PDROP ,
+			     "lstimi", tick_sbt * timeout, 0 , C_HARDCLOCK);
+	else 
+		ret = _msleep_spin_sbt(current, m, flags | PDROP, "lstimispin",
+				      tick_sbt * timeout, 0, C_HARDCLOCK);
+
 	set_current_state(TASK_RUNNING);
 
 	return (-ret);
@@ -303,7 +312,7 @@ kobject_add_complete(struct kobject *kobj, struct kobject *parent)
 	const struct kobj_type *t;
 	int error;
 
-	kobj->parent = parent;
+	kobj->parent = kobject_get(parent);
 	error = sysfs_create_dir(kobj);
 	if (error == 0 && kobj->ktype && kobj->ktype->default_attrs) {
 		struct attribute **attr;
@@ -523,37 +532,32 @@ kobject_init_and_add(struct kobject *kobj, const struct kobj_type *ktype,
 }
 
 void
-linux_set_current(struct thread *td, struct task_struct *t)
+linux_alloc_current(void)
 {
 	struct mm_struct *mm;
+	struct task_struct *t;
+	struct thread *td;
 
-	memset(t, 0, sizeof(*t));
+	td = curthread;
+	MPASS(__predict_true(td->td_lkpi_task == NULL));
+
+	t = malloc(sizeof(*t), M_LCINT, M_WAITOK|M_ZERO);
 	task_struct_fill(td, t);
 	mm = t->mm;
 	init_rwsem(&mm->mmap_sem);
 	mm->mm_count.counter = 1;
 	mm->mm_users.counter = 1;
-	task_struct_set(td, t);
-}
-
-void
-linux_clear_current(struct thread *td)
-{
-	task_struct_set(td, NULL);
+	curthread->td_lkpi_task = t;
 }
 
 static void
 linux_file_dtor(void *cdp)
 {
 	struct linux_file *filp;
-	struct task_struct t;
-	struct thread *td;
 
-	td = curthread;
-	linux_set_current(td, &t);
+	linux_set_current();
 	filp = cdp;
 	filp->f_op->release(filp->f_vnode, filp);
-	linux_clear_current(td);
 	vdrop(filp->f_vnode);
 	kfree(filp);
 }
@@ -604,17 +608,12 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_pag
 	vm_page_t page;
 	struct vm_fault vmf;
 	struct vm_area_struct *vmap, cvma;
-	vm_memattr_t memattr;
 	int rc, err, fault_flags;
 	vm_object_t page_object;
 	unsigned long vma_flags;
 	vm_map_t map;
-	struct thread *td;
-	struct task_struct t;
 
-	td = curthread;
-	linux_set_current(td, &t);
-	memattr = vm_obj->memattr;
+	linux_set_current();
 
 	vmap  = vm_obj->handle;
 	/*
@@ -626,16 +625,18 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_pag
 		vm_page_remove(*mres);
 		vm_page_unlock(*mres);
 	}
+
 	/*
 	 * We minimize object lock acquisition by tracking the pfn
 	 * inside of the vma that we pass in.
 	 */
-	vma_flags = VM_PFNINTERNAL;
-	fault_flags = (prot & VM_PROT_WRITE) ? FAULT_FLAG_WRITE : 0;
 
 	trace_compat_cdev_pager_fault(vm_obj, offset, prot, mres);
 	vm_object_pip_add(vm_obj, 1);
 	VM_OBJECT_WUNLOCK(vm_obj);
+retry:
+	vma_flags = VM_PFNINTERNAL;
+	fault_flags = (prot & VM_PROT_WRITE) ? FAULT_FLAG_WRITE : 0;
 
 	map = &curproc->p_vmspace->vm_map;
 	vmap->vm_start = vm_area_get_object_start(map, vm_obj, vmap);
@@ -660,13 +661,21 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_pag
 	if (err != VM_FAULT_NOPAGE)
 		goto err;
 
+
 	/*
 	 * By contract vm_insert_pfn will wait until it can busy the first
-	 * page. So if we get here without at least one valid pfn there is
-	 * definitively a bug.
+	 * page. So if we get here without at least one valid pfn there may
+	 * be a bug - or maybe we lost a race.
 	 */
-	MPASS(cvma.vm_pfn_count > 0);
-
+	if (cvma.vm_pfn_count == 0) {
+		VM_OBJECT_WLOCK(vm_obj);
+		page = vm_page_lookup(vm_obj, OFF_TO_IDX(offset));
+		if (page != NULL)
+			goto done;
+		VM_OBJECT_WUNLOCK(vm_obj);
+		kern_yield(0);
+		goto retry;
+	}
 	/*
 	 * A device page can be mapped by multiple objects and this
 	 * page is currently in another object
@@ -682,7 +691,8 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_pag
 	}
 
 	VM_OBJECT_WLOCK(vm_obj);
-	vm_page_assert_xbusied(PFN_TO_VM_PAGE(cvma.vm_pfn_array[0]));
+	page = PFN_TO_VM_PAGE(cvma.vm_pfn_array[0]);
+done:
 	/*
 	 * The VM has helpfully given us pages, but device memory
 	 * is not fungible. Thus we need to remove them from the object
@@ -690,7 +700,6 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_pag
 	 * actually use. We don't free them unless we succeed, so that 
 	 * there is still a valid result page on failure.
 	 */
-	page = PFN_TO_VM_PAGE(cvma.vm_pfn_array[0]);
 	if (mres && *mres != page) {
 		vm_page_lock(*mres);
 		vm_page_free(*mres);
@@ -715,14 +724,15 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_pag
 		}
 		page->valid = VM_PAGE_BITS_ALL;
 	}
-	if (mres && !vm_page_xbusied(*mres))
-		vm_page_xbusy(*mres);
+	if (!vm_page_xbusied(page))
+		while (vm_page_tryxbusy(page) == 0) {
+			vm_page_lock(page);
+			vm_page_busy_sleep(page, "linuxvipp");
+		}
 
 	vm_object_pip_wakeup(vm_obj);
-	linux_clear_current(td);
 	return (VM_PAGER_OK);
 err:
-	panic("fault failed!");
 	VM_OBJECT_WLOCK(vm_obj);
 	switch (err) {
 	case VM_FAULT_OOM:
@@ -731,12 +741,14 @@ err:
 	case VM_FAULT_SIGBUS:
 		rc = VM_PAGER_BAD;
 		break;
+	case VM_FAULT_NOPAGE:
+		rc = VM_PAGER_ERROR;
+		break;
 	default:
 		panic("unexpected error %d\n", err);
 		rc = VM_PAGER_ERROR;
 	}
 	vm_object_pip_wakeup(vm_obj);
-	linux_clear_current(td);
 	return (rc);
 }
 
@@ -772,7 +784,6 @@ linux_dev_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
 {
 	struct linux_cdev *ldev;
 	struct linux_file *filp;
-	struct task_struct t;
 	struct file *file;
 	int error;
 
@@ -786,7 +797,7 @@ linux_dev_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
 	filp->f_flags = file->f_flag;
 	vhold(file->f_vnode);
 	filp->f_vnode = file->f_vnode;
-	linux_set_current(td, &t);
+	linux_set_current();
 	if (filp->f_op->open) {
 		error = -filp->f_op->open(file->f_vnode, filp);
 		if (error) {
@@ -800,7 +811,6 @@ linux_dev_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
 		kfree(filp);
 	}
 done:
-	linux_clear_current(td);
 	return (error);
 }
 
@@ -891,7 +901,6 @@ linux_dev_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag,
 {
 	struct linux_cdev *ldev;
 	struct linux_file *filp;
-	struct task_struct t;
 	struct file *file;
 	unsigned size;
 	int error;
@@ -904,7 +913,7 @@ linux_dev_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag,
 		return (error);
 	filp->f_flags = file->f_flag;
 
-	linux_set_current(td, &t);
+	linux_set_current();
 	size = IOCPARM_LEN(cmd);
 	/* refer to logic in sys_ioctl() */
 	if (size > 0) {
@@ -914,8 +923,8 @@ linux_dev_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag,
 		 * Background: Linux code expects a user-space address
 		 * while FreeBSD supplies a kernel-space address.
 		 */
-		t.bsd_ioctl_data = data;
-		t.bsd_ioctl_len = size;
+		current->bsd_ioctl_data = data;
+		current->bsd_ioctl_len = size;
 		data = (void *)LINUX_IOCTL_MIN_PTR;
 	} else {
 		/* fetch user-space pointer */
@@ -925,8 +934,11 @@ linux_dev_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag,
 		error = -filp->f_op->unlocked_ioctl(filp, cmd, (u_long)data);
 	else
 		error = ENOTTY;
-	linux_clear_current(td);
-
+	if (size > 0) {
+		current->bsd_ioctl_data = NULL;
+		current->bsd_ioctl_len = -1;
+	}
+	
 	return (error);
 }
 
@@ -935,7 +947,6 @@ linux_dev_read(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct linux_cdev *ldev;
 	struct linux_file *filp;
-	struct task_struct t;
 	struct thread *td;
 	struct file *file;
 	ssize_t bytes;
@@ -952,7 +963,7 @@ linux_dev_read(struct cdev *dev, struct uio *uio, int ioflag)
 	/* XXX no support for I/O vectors currently */
 	if (uio->uio_iovcnt != 1)
 		return (EOPNOTSUPP);
-	linux_set_current(td, &t);
+	linux_set_current();
 	if (filp->f_op->read) {
 		bytes = filp->f_op->read(filp, uio->uio_iov->iov_base,
 					 uio->uio_iov->iov_len, &uio->uio_offset);
@@ -965,7 +976,6 @@ linux_dev_read(struct cdev *dev, struct uio *uio, int ioflag)
 			error = -bytes;
 	} else
 		error = ENXIO;
-	linux_clear_current(td);
 
 	return (error);
 }
@@ -975,7 +985,6 @@ linux_dev_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
 	struct linux_cdev *ldev;
 	struct linux_file *filp;
-	struct task_struct t;
 	struct thread *td;
 	struct file *file;
 	ssize_t bytes;
@@ -992,7 +1001,7 @@ linux_dev_write(struct cdev *dev, struct uio *uio, int ioflag)
 	/* XXX no support for I/O vectors currently */
 	if (uio->uio_iovcnt != 1)
 		return (EOPNOTSUPP);
-	linux_set_current(td, &t);
+	linux_set_current();
 	if (filp->f_op->write) {
 		bytes = filp->f_op->write(filp, uio->uio_iov->iov_base,
 					  uio->uio_iov->iov_len, &uio->uio_offset);
@@ -1005,7 +1014,6 @@ linux_dev_write(struct cdev *dev, struct uio *uio, int ioflag)
 			error = -bytes;
 	} else
 		error = ENXIO;
-	linux_clear_current(td);
 
 	return (error);
 }
@@ -1015,7 +1023,6 @@ linux_dev_poll(struct cdev *dev, int events, struct thread *td)
 {
 	struct linux_cdev *ldev;
 	struct linux_file *filp;
-	struct task_struct t;
 	struct file *file;
 	int revents;
 	int error;
@@ -1023,6 +1030,7 @@ linux_dev_poll(struct cdev *dev, int events, struct thread *td)
 
 	file = td->td_fpop;
 	ldev = dev->si_drv1;
+	revents = 0;
 	if (ldev == NULL)
 		return (0);
 	if ((error = devfs_get_cdevpriv((void **)&filp)) != 0)
@@ -1030,16 +1038,14 @@ linux_dev_poll(struct cdev *dev, int events, struct thread *td)
 	filp->f_flags = file->f_flag;
 	if (filp->_file == NULL)
 		filp->_file = td->td_fpop;
-	linux_set_current(td, &t);
+	linux_set_current();
 
 	if (filp->f_op->poll) {
 		/* XXX need to add support for bounded wait */
 		poll_initwait(&table);
 		revents = filp->f_op->poll(filp, &table.pt) & events;
 		poll_freewait(&table);
-	} else
-		revents = 0;
-	linux_clear_current(td);
+	}
 
 	return (revents);
 }
@@ -1051,7 +1057,6 @@ linux_dev_mmap_single(struct cdev *dev, vm_ooffset_t *offset,
 	struct linux_cdev *ldev;
 	struct linux_file *filp;
 	struct thread *td;
-	struct task_struct t;
 	struct file *file;
 	struct vm_area_struct vma, *vmap;
 	vm_memattr_t attr;
@@ -1065,12 +1070,12 @@ linux_dev_mmap_single(struct cdev *dev, vm_ooffset_t *offset,
 	if ((error = devfs_get_cdevpriv((void **)&filp)) != 0)
 		return (error);
 	filp->f_flags = file->f_flag;
-	linux_set_current(td, &t);
+	linux_set_current();
 	vma.vm_start = 0;
 	vma.vm_end = size;
 	vma.vm_pgoff = *offset / PAGE_SIZE;
 	vma.vm_pfn = 0;
-	vma.vm_page_prot = nprot;
+	vma.vm_flags = vma.vm_page_prot = nprot;
 	vma.vm_ops = NULL;
 	if (filp->f_op->mmap) {
 		error = -filp->f_op->mmap(filp, &vma);
@@ -1117,7 +1122,6 @@ linux_dev_mmap_single(struct cdev *dev, vm_ooffset_t *offset,
 		}
 	} else
 		error = ENODEV;
-	linux_clear_current(td);
 	return (error);
 }
 
@@ -1138,7 +1142,6 @@ linux_file_read(struct file *file, struct uio *uio, struct ucred *active_cred,
     int flags, struct thread *td)
 {
 	struct linux_file *filp;
-	struct task_struct t;
 	ssize_t bytes;
 	int error;
 
@@ -1148,7 +1151,7 @@ linux_file_read(struct file *file, struct uio *uio, struct ucred *active_cred,
 	/* XXX no support for I/O vectors currently */
 	if (uio->uio_iovcnt != 1)
 		return (EOPNOTSUPP);
-	linux_set_current(td, &t);
+	linux_set_current();
 	if (filp->f_op->read) {
 		bytes = filp->f_op->read(filp, uio->uio_iov->iov_base,
 		    uio->uio_iov->iov_len, &uio->uio_offset);
@@ -1161,7 +1164,6 @@ linux_file_read(struct file *file, struct uio *uio, struct ucred *active_cred,
 			error = -bytes;
 	} else
 		error = ENXIO;
-	linux_clear_current(td);
 
 	return (error);
 }
@@ -1171,7 +1173,6 @@ linux_file_poll(struct file *file, int events, struct ucred *active_cred,
     struct thread *td)
 {
 	struct linux_file *filp;
-	struct task_struct t;
 	struct poll_wqueues table;
 	int revents;
 
@@ -1179,14 +1180,13 @@ linux_file_poll(struct file *file, int events, struct ucred *active_cred,
 	filp->f_flags = file->f_flag;
 	if (filp->_file == NULL)
 		filp->_file = td->td_fpop;
-	linux_set_current(td, &t);
+	linux_set_current();
 	if (filp->f_op->poll) {
 		poll_initwait(&table);
 		revents = filp->f_op->poll(filp, &table.pt) & events;
 		poll_freewait(&table);
 	} else
 		revents = 0;
-	linux_clear_current(td);
 
 	return (revents);
 }
@@ -1195,14 +1195,12 @@ static int
 linux_file_close(struct file *file, struct thread *td)
 {
 	struct linux_file *filp;
-	struct task_struct t;
 	int error;
 
 	filp = (struct linux_file *)file->f_data;
 	filp->f_flags = file->f_flag;
-	linux_set_current(td, &t);
+	linux_set_current();
 	error = -filp->f_op->release(NULL, filp);
-	linux_clear_current(td);
 	funsetown(&filp->f_sigio);
 	kfree(filp);
 
@@ -1214,14 +1212,13 @@ linux_file_ioctl(struct file *fp, u_long cmd, void *data, struct ucred *cred,
     struct thread *td)
 {
 	struct linux_file *filp;
-	struct task_struct t;
 	int error;
 
 	filp = (struct linux_file *)fp->f_data;
 	filp->f_flags = fp->f_flag;
 	error = 0;
 
-	linux_set_current(td, &t);
+	linux_set_current();
 	switch (cmd) {
 	case FIONBIO:
 		break;
@@ -1243,7 +1240,7 @@ linux_file_ioctl(struct file *fp, u_long cmd, void *data, struct ucred *cred,
 		error = ENOTTY;
 		break;
 	}
-	linux_clear_current(td);
+
 	return (error);
 }
 
@@ -1338,6 +1335,15 @@ add_timer(struct timer_list *timer)
 	    &linux_timer_callback_wrapper, timer);
 }
 
+void
+add_timer_on(struct timer_list *timer, int cpu)
+{
+
+	callout_reset_on(&timer->timer_callout,
+	    linux_timer_jiffies_until(timer->expires),
+	    &linux_timer_callback_wrapper, timer, cpu);
+}
+
 static void
 linux_timer_init(void *arg)
 {
@@ -1377,7 +1383,7 @@ long
 linux_wait_for_common(struct completion *c, int flags)
 {
 
-	if (unlikely(SCHEDULER_STOPPED()))
+	if (unlikely(SKIP_SLEEP()))
 		return (0);
 
 	if (flags != 0)
@@ -1409,7 +1415,7 @@ linux_wait_for_timeout_common(struct completion *c, long timeout, int flags)
 {
 	long end = jiffies + timeout;
 
-	if (SCHEDULER_STOPPED())
+	if (SKIP_SLEEP())
 		return (0);
 
 	if (flags != 0)
@@ -1469,54 +1475,6 @@ linux_completion_done(struct completion *c)
 		isdone = 0;
 	sleepq_release(c);
 	return (isdone);
-}
-
-void
-linux_delayed_work_fn(void *arg)
-{
-	struct delayed_work *work;
-
-	work = arg;
-	taskqueue_enqueue(work->work.taskqueue, &work->work.work_task);
-}
-
-void
-linux_work_fn(void *context, int pending)
-{
-	struct work_struct *work;
-	struct task_struct t;
-
-	work = context;
-
-	linux_set_current(curthread, &t);
-	work->fn(work);
-	linux_clear_current(curthread);
-}
-
-void
-linux_flush_fn(void *context, int pending)
-{
-}
-
-struct workqueue_struct *
-linux_create_workqueue_common(const char *name, int cpus)
-{
-	struct workqueue_struct *wq;
-
-	wq = kmalloc(sizeof(*wq), M_WAITOK);
-	wq->taskqueue = taskqueue_create(name, M_WAITOK,
-	    taskqueue_thread_enqueue,  &wq->taskqueue);
-	atomic_set(&wq->draining, 0);
-	taskqueue_start_threads(&wq->taskqueue, cpus, PWAIT, "%s", name);
-
-	return (wq);
-}
-
-void
-destroy_workqueue(struct workqueue_struct *wq)
-{
-	taskqueue_free(wq->taskqueue);
-	kfree(wq);
 }
 
 static void
@@ -1770,7 +1728,7 @@ __register_chrdev_p(unsigned int major, unsigned int baseminor,
 		cdev_init(cdev, fops);
 		kobject_set_name(&cdev->kobj, name);
 
-		ret = cdev_add_ext(cdev, i, uid, gid, mode);
+		ret = cdev_add_ext(cdev, makedev(major, i), uid, gid, mode);
 		cdev->major = major;
 		cdev->baseminor = i;	
 		sx_xlock(&linux_global_rcu_lock);
@@ -1809,17 +1767,14 @@ static void
 async_run_entry_fn(struct work_struct *work)
 {
 	struct async_entry *entry; 	
-	struct task_struct t;
-	struct thread *td;
 
-	td = curthread;
-	linux_set_current(td, &t);
+	linux_set_current();
 	entry  = container_of(work, struct async_entry, work);
 	entry->func(entry->data, entry->cookie);
 	kfree(entry);
 	atomic_dec(&entry_count);
 	wake_up(&async_done);
-	linux_clear_current(td);
+
 }
 
 async_cookie_t
@@ -1865,9 +1820,9 @@ linux_compat_init(void *arg)
 	boot_cpu_data.x86_clflush_size = cpu_clflush_line_size;
 	boot_cpu_data.x86 = ((cpu_id & 0xF0000) >> 12) | ((cpu_id & 0xF0) >> 4);
 
-	system_long_wq = alloc_workqueue("events_long", 0, 0);
-	system_wq = alloc_workqueue("events", 0, 0);
-	system_power_efficient_wq = alloc_workqueue("power efficient", 0, 0);
+	system_long_wq = alloc_workqueue("events_long", 0, mp_ncpus);
+	system_wq = alloc_workqueue("events", 0, mp_ncpus);
+	system_power_efficient_wq = alloc_workqueue("power efficient", 0, mp_ncpus);
 	system_unbound_wq = alloc_workqueue("events_unbound", WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
 	INIT_LIST_HEAD(&cdev_list);
 	rootoid = SYSCTL_ADD_ROOT_NODE(NULL,

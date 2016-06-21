@@ -246,7 +246,7 @@ extern unsigned long pci_mem_start;
 #define PCIBIOS_MIN_IO		0x1000
 #define PCIBIOS_MIN_MEM		(pci_mem_start)
 #endif
-	
+
 struct pci_bus {
 	struct list_head node;		/* node in list of buses */
 	struct pci_bus	*parent;	/* parent bus this bridge is on */
@@ -281,12 +281,14 @@ extern resource_size_t pcibios_align_resource(void *data, const struct linux_res
 
 extern int release_resource(struct linux_resource *old);
 
-#define LINUXKPI_MAX_PCI_RESOURCE 6
+#define LINUXKPI_BIOS 6
+#define LINUXKPI_MAX_PCI_RESOURCE 7
 
 struct pci_resources {
 	struct resource *r[LINUXKPI_MAX_PCI_RESOURCE];
 	int rid[LINUXKPI_MAX_PCI_RESOURCE];
 	void *map[LINUXKPI_MAX_PCI_RESOURCE];
+	int type[LINUXKPI_MAX_PCI_RESOURCE];
 };
 
 struct pci_dev {
@@ -511,51 +513,8 @@ linux_pci_disable_msi(struct pci_dev *pdev)
 	/* pci_disable_msi(pdev->dev.bsddev); */
 }
 
-static inline struct pci_dev *
-linux_pci_get_class(unsigned int class, struct pci_dev *from)
-{
-	device_t dev;
-	struct pci_dev *pdev;
-	struct pci_bus *pbus;
-	int pcic, pcis;
 
-	pdev = from;
-	if (class == (PCI_CLASS_BRIDGE_ISA << 8)) {
-		pcis = PCIS_BRIDGE_ISA;
-		pcic = PCIC_BRIDGE;
-	} else if (class == (PCI_CLASS_DISPLAY_VGA << 8)) {
-		pcis = PCIS_DISPLAY_VGA;
-		pcic = PCIC_DISPLAY;
-	} else {
-		log(LOG_WARNING, "unrecognized class %d in %s\n", class, __FUNCTION__);
-		BACKTRACE();
-		return (NULL);
-	}
-
-	if (pdev != NULL) {
-		dev = pdev->dev.bsddev;
-	} else
-		dev = NULL;
-
-	dev = pci_find_class(pcic, pcis, dev);
-	if (dev == NULL)
-		return (NULL);
-
-	if (pdev == NULL)
-		pdev = malloc(sizeof(*pdev), M_DEVBUF, M_WAITOK|M_ZERO);
-
-	/* XXX do we need to initialize pdev more here ? */
-	pdev->vendor = pci_get_vendor(dev);
-	pdev->device = pci_get_device(dev);
-	pdev->dev.bsddev = dev;
-	if (from == NULL) {
-		pbus = malloc(sizeof(*pbus), M_DEVBUF, M_WAITOK|M_ZERO);
-		pbus->self = pdev;
-		pdev->bus = pbus;
-	}
-	return (pdev);
-}
-
+struct pci_dev *linux_pci_get_class(unsigned int class, struct pci_dev *from);
 
 struct pci_dev *linux_bsddev_to_pci_dev(device_t dev);
 
@@ -610,7 +569,7 @@ pci_read_config_dword(struct pci_dev *pdev, int where, u32 *val)
 
 	*val = (u32)pci_read_config(pdev->dev.bsddev, where, 4);
 	return (0);
-} 
+}
 
 static inline int
 pci_write_config_byte(struct pci_dev *pdev, int where, u8 val)
@@ -630,7 +589,7 @@ pci_write_config_word(struct pci_dev *pdev, int where, u16 val)
 
 static inline int
 pci_write_config_dword(struct pci_dev *pdev, int where, u32 val)
-{ 
+{
 
 	pci_write_config(pdev->dev.bsddev, where, val, 4);
 	return (0);
@@ -977,18 +936,9 @@ pci_num_vf(struct pci_dev *dev)
 	return (0);
 }
 
-static inline void
-pci_unmap_rom(struct pci_dev *pdev, u8 *bios)
-{
-	vga_pci_unmap_bios(pdev->dev.bsddev, bios);
-}
+void pci_unmap_rom(struct pci_dev *pdev, u8 *bios);
 
-static inline void *
-pci_map_rom(struct pci_dev *pdev, size_t *size)
-{
-	return (vga_pci_map_bios(pdev->dev.bsddev, size));
-}
-
+void * pci_map_rom(struct pci_dev *pdev, size_t *size);
 
 int pci_bus_read_config_byte(struct pci_bus *bus, unsigned int devfn,
 			     int where, u8 *val);
@@ -1006,22 +956,25 @@ int pci_bus_write_config_dword(struct pci_bus *bus, unsigned int devfn,
 int pci_generic_config_read(struct pci_bus *bus, unsigned int devfn,
 			       int where, u32 val);
 
+int pci_default_suspend(struct pci_dev *dev, pm_message_t state);
+int pci_default_resume(struct pci_dev *dev);
+
 static inline bool pci_is_root_bus(struct pci_bus *pbus)
 {
-	UNIMPLEMENTED();
-	return (false);
+
+	return (pbus->self == NULL);
 }
 
-static inline void *pci_platform_rom(struct pci_dev *pdev, size_t *size){
-	UNIMPLEMENTED();
-        return (false);
-}
+void *pci_platform_rom(struct pci_dev *pdev, size_t *size);
+
 
 static inline void linux_pci_save_state(struct pci_dev *pdev){
+	panic("implment me!!");
 	UNIMPLEMENTED();
 }
 
 static inline void linux_pci_restore_state(struct pci_dev *pdev){
+	panic("implment me!!");
 	UNIMPLEMENTED();
 }
 
@@ -1033,13 +986,13 @@ static inline void *
 pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
                      dma_addr_t *dma_handle)
 {
-	UNIMPLEMENTED();
-	return NULL;
+
+	return dma_alloc_coherent(hwdev == NULL ? NULL : &hwdev->dev, size, dma_handle, GFP_ATOMIC);
 }
 
 static inline int
 pcie_get_readrq(struct pci_dev *dev){
-	UNIMPLEMENTED();
+	panic("implment me!!");
 	return (0);
 }
 

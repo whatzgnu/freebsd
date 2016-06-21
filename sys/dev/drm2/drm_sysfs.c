@@ -36,6 +36,11 @@ int drm_debug_persist = 1;
 int drm_debug_persist = 0;
 #endif
 SYSCTL_INT(_dev_drm, OID_AUTO, drm_debug_persist, CTLFLAG_RWTUN, &drm_debug_persist, 0, "keep drm debug flags post-load");
+int drm_panic_on_error = 0;
+SYSCTL_INT(_dev_drm, OID_AUTO, error_panic, CTLFLAG_RWTUN, &drm_panic_on_error, 0, "panic if an ERROR is hit");
+int drm_skipwc;
+SYSCTL_INT(_dev_drm, OID_AUTO, skipwc, CTLFLAG_RWTUN, &drm_skipwc, 0, "disable WC on mmap");
+
 
 static void
 clear_debug_func(void *arg __unused)
@@ -614,9 +619,9 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 	int r;
 
 	if (minor->type == DRM_MINOR_CONTROL)
-		minor_str = "dri/controlD%d";
+		minor_str = "dri/control%d";
 	else if (minor->type == DRM_MINOR_RENDER)
-		minor_str = "dri/renderD%d";
+		minor_str = "dri/render%d";
 	else
 		minor_str = "dri/card%d";
 

@@ -98,7 +98,7 @@ cdev_add(struct linux_cdev *cdev, dev_t dev, unsigned count)
 	args.mda_gid = 0;
 	args.mda_mode = 0700;
 	args.mda_si_drv1 = cdev;
-	args.mda_unit = MINOR(dev);
+	args.mda_unit = dev;
 
 	error = make_dev_s(&args, &cdev->cdev, "%s",
 	    kobject_name(&cdev->kobj));

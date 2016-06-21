@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/vmalloc.h>
+#include <linux/pfn_t.h>
 
 
 #include <vm/vm.h>
@@ -68,8 +69,9 @@ __FBSDID("$FreeBSD$");
 
 extern u_int	cpu_feature;
 extern u_int	cpu_stdext_feature;
+extern int	linux_skip_prefault;
 
-
+#if defined(__i386__) || defined(__amd64__)
 static void
 __wbinvd(void *arg)
 {
@@ -83,6 +85,24 @@ wbinvd_on_all_cpus(void)
 	return (on_each_cpu(__wbinvd, NULL, 1));
 }
 
+static int
+needs_set_memattr(vm_page_t m, vm_memattr_t attr)
+{
+	vm_memattr_t mode;
+
+	mode = m->md.pat_mode;
+
+	if ((mode == 0) && !(m->flags & PG_FICTITIOUS) &&
+	    (attr == VM_MEMATTR_DEFAULT))
+		return (0);
+
+	if (mode != attr)
+		return (1);
+	return (0);
+}
+#endif
+
+
 int
 vm_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr, unsigned long pfn, pgprot_t pgprot)
 {
@@ -91,18 +111,22 @@ vm_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr, unsigned long
 	pmap_t pmap = vma->vm_cached_map->pmap;
 	vm_memattr_t attr = pgprot2cachemode(pgprot);
 
+	if (__predict_false(linux_skip_prefault) && (vma->vm_pfn_count > 0))
+		return (-EBUSY);
+
 	vm_obj = vma->vm_obj;
 	page = PHYS_TO_VM_PAGE((pfn << PAGE_SHIFT));
-#if defined(__amd64__) || defined(__i386__)
-	MPASS(page->md.pat_mode == attr);
-	page->md.pat_mode = attr;
-#endif	
+
+#if defined(__i386__) || defined(__amd64__)
+	if (needs_set_memattr(page, attr)) {
+		page->flags |= PG_FICTITIOUS;
+		pmap_page_set_memattr(page, attr);
+	}
+#endif
+
 	MPASS(vma->vm_flags & VM_PFNINTERNAL);
 	if ((vma->vm_flags & VM_PFNINTERNAL) && (vma->vm_pfn_count == 0)) {
-		while (vm_page_tryxbusy(page) == 0) {
-			vm_page_lock(page);
-			vm_page_busy_sleep(page, "linuxvipp");
-		}
+		vm_page_tryxbusy(page);
 		vma->vm_pfn_array[vma->vm_pfn_count++] = pfn;
 	} else
 		pmap_enter_quick(pmap, addr, page, pgprot & VM_PROT_ALL);
@@ -115,6 +139,16 @@ vm_insert_pfn(struct vm_area_struct *vma, unsigned long addr, unsigned long pfn)
 
 	return (vm_insert_pfn_prot(vma, addr, pfn, vma->vm_page_prot));
 }
+
+int
+vm_insert_mixed(struct vm_area_struct *vma, unsigned long addr, pfn_t pfn)
+{
+	unsigned long pfnval;
+
+	pfnval = pfn.val & ~PFN_FLAGS_MASK;
+	return (vm_insert_pfn_prot(vma, addr, pfnval, vma->vm_page_prot));
+}
+
 
 void
 linux_clflushopt(u_long addr)
@@ -225,12 +259,24 @@ vmap(struct page **pages, unsigned int count, unsigned long flags, int prot)
 {
 	vm_offset_t off;
 	size_t size;
+	int i, attr;
 
 	size = count * PAGE_SIZE;
 	off = kva_alloc(size);
 	if (off == 0)
 		return (NULL);
 	vmmap_add((void *)off, size);
+	attr = pgprot2cachemode(prot);
+	if (attr != VM_MEMATTR_DEFAULT) {
+		for (i = 0; i < count; i++) {
+			vm_page_lock(pages[i]);
+			pages[i]->flags |= PG_FICTITIOUS;
+			vm_page_unlock(pages[i]);
+			pmap_page_set_memattr(pages[i], attr);
+		}
+
+	}
+
 	pmap_qenter(off, pages, count);
 	return ((void *)off);
 }
@@ -265,8 +311,15 @@ kmap(vm_page_t page)
 void *
 kmap_atomic_prot(vm_page_t page, pgprot_t prot)
 {
+	vm_memattr_t attr = pgprot2cachemode(prot);
 
 	sched_pin();
+	if (attr != VM_MEMATTR_DEFAULT) {
+		vm_page_lock(page);
+		page->flags |= PG_FICTITIOUS;
+		vm_page_unlock(page);
+		pmap_page_set_memattr(page, attr);
+	}
 	return (kmap(page));
 }
 
@@ -425,7 +478,7 @@ int
 set_memory_uc(unsigned long addr, int numpages)
 {
 
-	return (pmap_change_attr(addr, numpages, PAT_UNCACHED));
+	return (pmap_change_attr(addr, numpages, VM_MEMATTR_UNCACHEABLE));
 }
 
 int
