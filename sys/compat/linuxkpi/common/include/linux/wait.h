@@ -36,6 +36,7 @@
 #include <linux/list.h>
 #include <linux/jiffies.h>
 #include <linux/sched.h>
+#include <linux/srcu.h>
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +58,12 @@ typedef int (*wait_queue_func_t)(wait_queue_t *wait, unsigned mode, int flags, v
 #define WQ_FLAG_EXCLUSIVE	0x01
 #define WQ_FLAG_WOKEN		0x02
 
+struct selinfo_task {
+	struct selinfo st_si;
+	struct task st_task;
+	struct srcu_struct st_ss;
+};
+
 struct __wait_queue {
 	unsigned int		flags;
 	void			*private;
@@ -66,9 +73,8 @@ struct __wait_queue {
 
 typedef struct wait_queue_head {
 	spinlock_t	lock;
-	struct selinfo	wait_poll;
 	struct list_head	task_list;
-	struct task	wait_poll_task;
+	struct selinfo_task	*wqh_st;
 } wait_queue_head_t;
 
 
@@ -116,7 +122,6 @@ autoremove_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key)
 		INIT_LIST_HEAD(&(wait)->task_list);			\
 		(wait)->flags = 0;					\
 	} while (0)
-
 
 
 #define LINUX_WAITQUEUE_INITIALIZER(name, tsk) {			\
@@ -186,26 +191,26 @@ __wake_up_locked(wait_queue_head_t *q, int mode, int nr, void *key)
 static inline void
 selwakeup_deferred(void *context, int pending)
 {
-	struct selinfo *sip;
+	struct selinfo_task *st;
 
-	sip = context;
-	selwakeup(sip);
+	st = context;
+	selwakeup(&st->st_si);
+	synchronize_srcu(&st->st_ss);
+	cleanup_srcu_struct(&st->st_ss);
+	free(st, M_KMALLOC);
 }
 
 static inline void
 __wake_up(wait_queue_head_t *q, int mode, int nr, void *key)
 {
 	int flags;
+	struct selinfo_task *st;
 
-	if (q->wait_poll.si_mtx != NULL) {
-		if (curthread->td_critnest == 0) {
-			selwakeup(&q->wait_poll);
-		} else {
-			TASK_INIT(&q->wait_poll_task, 0, selwakeup_deferred, &q->wait_poll);
-			taskqueue_enqueue(taskqueue_fast, &q->wait_poll_task);
-		}
-	}
 	spin_lock_irqsave(&q->lock, flags);
+	if ((st = q->wqh_st) != NULL) {
+		q->wqh_st = NULL;
+		taskqueue_enqueue(taskqueue_fast, &st->st_task);
+	}
 	__wake_up_locked(q, mode, nr, key);
 	spin_unlock_irqrestore(&q->lock, flags);
 }
