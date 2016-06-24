@@ -10,9 +10,11 @@ SRCS=	hv_channel.c \
 	hv_et.c \
 	hv_hv.c \
 	hv_ring_buffer.c \
-	hv_vmbus_drv_freebsd.c \
-	hv_vmbus_priv.h \
-	hyperv_busdma.c
+	hyperv.c \
+	hyperv_busdma.c \
+	hyperv_machdep.c \
+	vmbus.c \
+	vmbus_et.c
 SRCS+=	acpi_if.h bus_if.h device_if.h opt_acpi.h
 
 # XXX: for assym.s

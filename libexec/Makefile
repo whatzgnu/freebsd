@@ -33,6 +33,10 @@ SUBDIR=	${_atf} \
 _atrun=		atrun
 .endif
 
+.if ${MK_BLACKLIST} != "no"
+_blacklistd-helper+=	blacklistd-helper
+.endif
+
 .if ${MK_BOOTPD} != "no"
 SUBDIR+=	bootpd
 .endif

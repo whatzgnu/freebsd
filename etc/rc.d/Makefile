@@ -119,6 +119,7 @@ FILES=	DAEMON \
 	var \
 	watchdogd \
 	ypbind \
+	ypldap \
 	yppasswdd \
 	ypserv \
 	ypset \
@@ -166,6 +167,10 @@ ATMPACKAGE=	atm
 FILES+=		automount
 FILES+=		automountd
 FILES+=		autounmountd
+.endif
+
+.if ${MK_BLACKLIST} != "no"
+_blacklistd+=	blacklistd
 .endif
 
 .if ${MK_BLUETOOTH} != "no"
