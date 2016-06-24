@@ -1051,7 +1051,7 @@ done:
  *
  * Assuming that the address is all properly allocated
  */
-bool_t
+int
 rpcb_getaddr(program, version, nconf, address, host)
 	rpcprog_t program;
 	rpcvers_t version;

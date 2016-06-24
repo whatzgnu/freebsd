@@ -40,7 +40,6 @@ DIRDEPS = \
 	lib/libcuse \
 	lib/libcxxrt \
 	lib/libdevctl \
-	lib/libdevdctl \
 	lib/libdevinfo \
 	lib/libdevstat \
 	lib/libdwarf \
@@ -214,10 +213,6 @@ DIRDEPS+= \
 	contrib/ofed/usr.lib/libosmvendor \
 	contrib/ofed/usr.lib/librdmacm \
 	contrib/ofed/usr.lib/libsdp
-.endif
-
-.if ${MK_BLACKLIST_SUPPORT} != "no"
-DIRDEPS+=	lib/libblacklist
 .endif
 
 .include <dirdeps.mk>

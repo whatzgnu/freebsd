@@ -477,9 +477,6 @@ xentimer_resume(device_t dev)
 	/* Reset the last uptime value */
 	pvclock_resume();
 
-	/* Reset the RTC clock */
-	inittodr(time_second);
-
 	/* Kick the timers on all CPUs */
 	smp_rendezvous(NULL, xentimer_percpu_resume, NULL, dev);
 

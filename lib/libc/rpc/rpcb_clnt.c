@@ -1010,7 +1010,7 @@ done:
  *
  * Assuming that the address is all properly allocated
  */
-bool_t
+int
 rpcb_getaddr(rpcprog_t program, rpcvers_t version, const struct netconfig *nconf,
     struct netbuf *address, const char *host)
 {

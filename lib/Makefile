@@ -161,10 +161,6 @@ SUBDIR_DEPEND_liblzma= ${_libthr}
 _libngatm=	libngatm
 .endif
 
-.if ${MK_BLACKLIST} != "no"
-_libblacklist=	libblacklist
-.endif
-
 .if ${MK_BLUETOOTH} != "no"
 _libbluetooth=	libbluetooth
 _libsdp=	libsdp

@@ -37,8 +37,7 @@ LDIRS=	BSD_daemon \
 	ses \
 	scsi_target \
 	sunrpc \
-	uefisign \
-	ypldap
+	uefisign
 
 XFILES=	BSD_daemon/FreeBSD.pfa \
 	BSD_daemon/README \
@@ -193,8 +192,7 @@ XFILES=	BSD_daemon/FreeBSD.pfa \
 	sunrpc/sort/rsort.c \
 	sunrpc/sort/sort.x \
 	sunrpc/sort/sort_proc.c \
-	uefisign/uefikeys \
-	ypldap/ypldap.conf
+	uefisign/uefikeys
 
 BINDIR= ${SHAREDIR}/examples
 

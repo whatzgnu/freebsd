@@ -1658,7 +1658,7 @@ ef10_nvram_partn_write_tlv(
  * Read a segment from nvram at the given offset into a buffer (segment_data)
  * and optionally write a new tag to it.
  */
-static	__checkReturn		efx_rc_t
+	static	__checkReturn	efx_rc_t
 ef10_nvram_segment_write_tlv(
 	__in			efx_nic_t *enp,
 	__in			uint32_t partn,
@@ -1684,25 +1684,20 @@ ef10_nvram_segment_write_tlv(
 	 */
 	status = ef10_nvram_read_tlv_segment(enp, partn, *partn_offsetp,
 	    *seg_datap, *src_remain_lenp);
-	if (status != 0) {
-		rc = EINVAL;
-		goto fail1;
-	}
+	if (status != 0)
+		return (EINVAL);
 
 	status = ef10_nvram_buf_segment_size(*seg_datap,
 	    *src_remain_lenp, &original_segment_size);
-	if (status != 0) {
-		rc = EINVAL;
-		goto fail2;
-	}
+	if (status != 0)
+		return (EINVAL);
 
 	if (write) {
 		/* Update the contents of the segment in the buffer */
 		if ((rc = ef10_nvram_buf_write_tlv(*seg_datap,
 			*dest_remain_lenp, tag, data, size,
-			&modified_segment_size)) != 0) {
-			goto fail3;
-		}
+			&modified_segment_size)) != 0)
+			goto fail1;
 		*dest_remain_lenp -= modified_segment_size;
 		*seg_datap += modified_segment_size;
 	} else {
@@ -1719,10 +1714,6 @@ ef10_nvram_segment_write_tlv(
 
 	return (0);
 
-fail3:
-	EFSYS_PROBE(fail3);
-fail2:
-	EFSYS_PROBE(fail2);
 fail1:
 	EFSYS_PROBE1(fail1, efx_rc_t, rc);
 

@@ -283,8 +283,7 @@ main(int argc, char **argv)
 	}
 
 	/* Set determinstic mode for -D, and by default without -U. */
-	if (Dflag || (Uflag == 0 && (bsdar->mode == 'q' || bsdar->mode == 'r' ||
-	    (bsdar->mode == '\0' && bsdar->options & AR_S))))
+	if (Dflag || (Uflag == 0 && (bsdar->mode == 'q' || bsdar->mode == 'r')))
 		bsdar->options |= AR_D;
 
 	if (bsdar->options & AR_A)

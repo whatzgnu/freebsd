@@ -78,7 +78,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/socket.h>
 #include <sys/sockio.h>
 #include <sys/sysctl.h>
-#include <sys/syslog.h>
 
 #include <net/bpf.h>
 #include <net/if.h>
@@ -2316,67 +2315,71 @@ pfsync_pointers_uninit()
 	PF_RULES_WUNLOCK();
 }
 
-static void
-vnet_pfsync_init(const void *unused __unused)
-{
-	int error;
-
-	V_pfsync_cloner = if_clone_simple(pfsyncname,
-	    pfsync_clone_create, pfsync_clone_destroy, 1);
-	error = swi_add(NULL, pfsyncname, pfsyncintr, V_pfsyncif,
-	    SWI_NET, INTR_MPSAFE, &V_pfsync_swi_cookie);
-	if (error) {
-		if_clone_detach(V_pfsync_cloner);
-		log(LOG_INFO, "swi_add() failed in %s\n", __func__);
-	}
-}
-VNET_SYSINIT(vnet_pfsync_init, SI_SUB_PROTO_FIREWALL, SI_ORDER_ANY,
-    vnet_pfsync_init, NULL);
-
-static void
-vnet_pfsync_uninit(const void *unused __unused)
-{
-
-	if_clone_detach(V_pfsync_cloner);
-	swi_remove(V_pfsync_swi_cookie);
-}
-/*
- * Detach after pf is gone; otherwise we might touch pfsync memory
- * from within pf after freeing pfsync.
- */
-VNET_SYSUNINIT(vnet_pfsync_uninit, SI_SUB_INIT_IF, SI_ORDER_SECOND,
-    vnet_pfsync_uninit, NULL);
-
 static int
 pfsync_init()
 {
-#ifdef INET
-	int error;
+	VNET_ITERATOR_DECL(vnet_iter);
+	int error = 0;
 
+	VNET_LIST_RLOCK();
+	VNET_FOREACH(vnet_iter) {
+		CURVNET_SET(vnet_iter);
+		V_pfsync_cloner = if_clone_simple(pfsyncname,
+		    pfsync_clone_create, pfsync_clone_destroy, 1);
+		error = swi_add(NULL, pfsyncname, pfsyncintr, V_pfsyncif,
+		    SWI_NET, INTR_MPSAFE, &V_pfsync_swi_cookie);
+		CURVNET_RESTORE();
+		if (error)
+			goto fail_locked;
+	}
+	VNET_LIST_RUNLOCK();
+#ifdef INET
 	error = pf_proto_register(PF_INET, &in_pfsync_protosw);
 	if (error)
-		return (error);
+		goto fail;
 	error = ipproto_register(IPPROTO_PFSYNC);
 	if (error) {
 		pf_proto_unregister(PF_INET, IPPROTO_PFSYNC, SOCK_RAW);
-		return (error);
+		goto fail;
 	}
 #endif
 	pfsync_pointers_init();
 
 	return (0);
+
+fail:
+	VNET_LIST_RLOCK();
+fail_locked:
+	VNET_FOREACH(vnet_iter) {
+		CURVNET_SET(vnet_iter);
+		if (V_pfsync_swi_cookie) {
+			swi_remove(V_pfsync_swi_cookie);
+			if_clone_detach(V_pfsync_cloner);
+		}
+		CURVNET_RESTORE();
+	}
+	VNET_LIST_RUNLOCK();
+
+	return (error);
 }
 
 static void
 pfsync_uninit()
 {
+	VNET_ITERATOR_DECL(vnet_iter);
 
 	pfsync_pointers_uninit();
 
-#ifdef INET
 	ipproto_unregister(IPPROTO_PFSYNC);
 	pf_proto_unregister(PF_INET, IPPROTO_PFSYNC, SOCK_RAW);
-#endif
+	VNET_LIST_RLOCK();
+	VNET_FOREACH(vnet_iter) {
+		CURVNET_SET(vnet_iter);
+		if_clone_detach(V_pfsync_cloner);
+		swi_remove(V_pfsync_swi_cookie);
+		CURVNET_RESTORE();
+	}
+	VNET_LIST_RUNLOCK();
 }
 
 static int
@@ -2413,7 +2416,6 @@ static moduledata_t pfsync_mod = {
 
 #define PFSYNC_MODVER 1
 
-/* Stay on FIREWALL as we depend on pf being initialized and on inetdomain. */
-DECLARE_MODULE(pfsync, pfsync_mod, SI_SUB_PROTO_FIREWALL, SI_ORDER_ANY);
+DECLARE_MODULE(pfsync, pfsync_mod, SI_SUB_PROTO_DOMAIN, SI_ORDER_ANY);
 MODULE_VERSION(pfsync, PFSYNC_MODVER);
 MODULE_DEPEND(pfsync, pf, PF_MODVER, PF_MODVER, PF_MODVER);

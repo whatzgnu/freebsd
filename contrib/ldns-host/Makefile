@@ -6,11 +6,11 @@ LOCALBASE?=/usr/local
 PREFIX?=${LOCALBASE}
 MANDIR?=${PREFIX}/man
 
-XCFLAGS=${CFLAGS} -I${LOCALBASE}/include -std=c99 -Wall -Wextra -pedantic
+XCFLAGS=${CFLAGS} -I${LOCALBASE}/include
 XLDFLAGS=${LDFLAGS} -L${LOCALBASE}/lib -lldns
 
 ${PROG}: ${SRC}
-	${CC} -o $@ ${XCFLAGS} ${SRC} ${XLDFLAGS}
+	${CC} -o $@ ${XCFLAGS} ${XLDFLAGS} ${SRC}
 
 clean:
 	rm -f ${PROG}

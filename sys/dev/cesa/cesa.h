@@ -257,9 +257,7 @@ struct cesa_softc {
 	STAILQ_HEAD(, cesa_session)	sc_free_sessions;
 
 	/* CESA SRAM Address */
-	bus_addr_t			sc_sram_base_pa;
-	vm_offset_t			sc_sram_base_va;
-	bus_size_t			sc_sram_size;
+	bus_addr_t			sc_sram_base;
 };
 
 struct cesa_chain_info {

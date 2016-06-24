@@ -14,7 +14,8 @@ SRCS=		ucl_emitter_streamline.c \
 		ucl_parser.c  \
 		ucl_schema.c \
 		ucl_sexp.c \
-		ucl_util.c
+		ucl_util.c \
+		xxhash.c
 
 .PATH:		${LIBUCL}/src \
 		${LIBUCL}/include

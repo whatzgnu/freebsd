@@ -40,7 +40,6 @@ oid.h: tree.def Makefile
 	gensnmptree -e ${XSYM} < ${.ALLSRC:M*.def} > ${.TARGET}
 
 .ORDER: tree.c tree.h
-tree.h: .NOMETA
 tree.c tree.h: tree.def
 	gensnmptree -l < ${.ALLSRC}
 

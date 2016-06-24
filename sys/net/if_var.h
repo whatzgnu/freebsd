@@ -311,8 +311,6 @@ struct ifnet {
 	 * that structure can be enhanced without changing the kernel
 	 * binary interface.
 	 */
-	void	*if_pspare[4];		/* packet pacing / general use */
-	int	if_ispare[4];		/* packet pacing / general use */
 };
 
 /* for compatibility with other BSDs */

@@ -90,8 +90,6 @@
     cam
         ata
         ..
-        nvme
-        ..
         scsi
         ..
     ..

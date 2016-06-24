@@ -18,8 +18,4 @@ CFLAGS+=	-mno-red-zone
 CFLAGS+=	-mno-aes
 .endif
 
-.if ${MACHINE_CPUARCH} == "aarch64"
-CFLAGS+=	-fshort-wchar
-.endif
-
 .include "../Makefile.inc"

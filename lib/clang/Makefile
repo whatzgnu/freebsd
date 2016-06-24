@@ -90,9 +90,7 @@ SUBDIR=	libclanganalysis \
 	libllvmx86utils
 
 .if ${MK_CLANG_EXTRAS} != "no"
-SUBDIR+=libclangformat \
-	libclangtoolingcore \
-	libllvmdebuginfodwarf \
+SUBDIR+=libllvmdebuginfodwarf \
 	libllvmdebuginfopdb \
 	libllvmlibdriver \
 	libllvmlto \

@@ -40,6 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
+#include <paths.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -49,6 +50,28 @@ __FBSDID("$FreeBSD$");
 
 /* Zygote info. */
 static int	zygote_sock = -1;
+
+static void
+stdnull(void)
+{
+	int fd;
+
+	fd = open(_PATH_DEVNULL, O_RDWR);
+	if (fd == -1)
+		errx(1, "Unable to open %s", _PATH_DEVNULL);
+
+	if (setsid() == -1)
+		errx(1, "Unable to detach from session");
+
+	if (dup2(fd, STDIN_FILENO) == -1)
+		errx(1, "Unable to cover stdin");
+	if (dup2(fd, STDOUT_FILENO) == -1)
+		errx(1, "Unable to cover stdout");
+	if (dup2(fd, STDERR_FILENO) == -1)
+		errx(1, "Unable to cover stderr");
+
+	close(fd);
+}
 
 int
 zygote_clone(zygote_func_t *func, int *chanfdp, int *procfdp)
@@ -90,7 +113,7 @@ zygote_clone(zygote_func_t *func, int *chanfdp, int *procfdp)
 static void
 zygote_main(int sock)
 {
-	int error, procfd;
+	int error, fd, procfd;
 	int chanfd[2];
 	nvlist_t *nvlin, *nvlout;
 	zygote_func_t *func;
@@ -99,6 +122,11 @@ zygote_main(int sock)
 	assert(sock > STDERR_FILENO);
 
 	setproctitle("zygote");
+
+	stdnull();
+	for (fd = STDERR_FILENO + 1; fd < sock; fd++)
+		close(fd);
+	closefrom(sock + 1);
 
 	for (;;) {
 		nvlin = nvlist_recv(sock, 0);

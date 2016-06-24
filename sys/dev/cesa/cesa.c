@@ -952,31 +952,20 @@ cesa_setup_sram(struct cesa_softc *sc)
 	ihandle_t sram_ihandle;
 	pcell_t sram_handle, sram_reg;
 
-	rv = OF_getencprop(ofw_bus_get_node(sc->sc_dev), "sram-handle",
-	    (void *)&sram_handle, sizeof(sram_handle));
-	if (rv <= 0)
-		return (rv);
+	if (OF_getprop(ofw_bus_get_node(sc->sc_dev), "sram-handle",
+	    (void *)&sram_handle, sizeof(sram_handle)) <= 0)
+		return (ENXIO);
 
 	sram_ihandle = (ihandle_t)sram_handle;
+	sram_ihandle = fdt32_to_cpu(sram_ihandle);
 	sram_node = OF_instance_to_package(sram_ihandle);
 
-	rv = OF_getencprop(sram_node, "reg", (void *)sram_reg, sizeof(sram_reg));
-	if (rv <= 0)
-		return (rv);
+	if (OF_getprop(sram_node, "reg", (void *)&sram_reg,
+	    sizeof(sram_reg)) <= 0)
+		return (ENXIO);
 
-	sc->sc_sram_base_pa = sram_reg[0];
-	/* Store SRAM size to be able to unmap in detach() */
-	sc->sc_sram_size = sram_reg[1];
+	sc->sc_sram_base = fdt32_to_cpu(sram_reg);
 
-#if defined(SOC_MV_ARMADA38X)
-	void *sram_va;
-
-	/* SRAM memory was not mapped in platform_sram_devmap(), map it now */
-	sram_va = pmap_mapdev(sc->sc_sram_base_pa, sc->sc_sram_size);
-	if (sram_va == NULL)
-		return (ENOMEM);
-	sc->sc_sram_base_va = (vm_offset_t)sram_va;
-#endif
 	return (0);
 }
 
@@ -1223,9 +1212,7 @@ err4:
 err3:
 	bus_dma_tag_destroy(sc->sc_data_dtag);
 err2:
-#if defined(SOC_MV_ARMADA38X)
-	pmap_unmapdev(sc->sc_sram_base_va, sc->sc_sram_size);
-#endif
+	bus_teardown_intr(dev, sc->sc_res[1], sc->sc_icookie);
 err1:
 	bus_release_resources(dev, cesa_res_spec, sc->sc_res);
 err0:
@@ -1273,10 +1260,6 @@ cesa_detach(device_t dev)
 	/* Relase I/O and IRQ resources */
 	bus_release_resources(dev, cesa_res_spec, sc->sc_res);
 
-#if defined(SOC_MV_ARMADA38X)
-	/* Unmap SRAM memory */
-	pmap_unmapdev(sc->sc_sram_base_va, sc->sc_sram_size);
-#endif
 	/* Destroy mutexes */
 	mtx_destroy(&sc->sc_sessions_lock);
 	mtx_destroy(&sc->sc_requests_lock);

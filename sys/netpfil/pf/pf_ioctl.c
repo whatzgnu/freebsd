@@ -87,6 +87,7 @@ __FBSDID("$FreeBSD$");
 #include <net/altq/altq.h>
 #endif
 
+static int		 pfattach(void);
 static struct pf_pool	*pf_get_pool(char *, u_int32_t, u_int8_t, u_int32_t,
 			    u_int8_t, u_int8_t, u_int8_t);
 
@@ -188,16 +189,7 @@ static struct cdevsw pf_cdevsw = {
 
 static volatile VNET_DEFINE(int, pf_pfil_hooked);
 #define V_pf_pfil_hooked	VNET(pf_pfil_hooked)
-
-/*
- * We need a flag that is neither hooked nor running to know when
- * the VNET is "valid".  We primarily need this to control (global)
- * external event, e.g., eventhandlers.
- */
-VNET_DEFINE(int, pf_vnet_active);
-#define V_pf_vnet_active	VNET(pf_vnet_active)
-
-int pf_end_threads;
+VNET_DEFINE(int,		pf_end_threads);
 
 struct rwlock			pf_rules_lock;
 struct sx			pf_ioctl_lock;
@@ -212,14 +204,17 @@ pfsync_defer_t			*pfsync_defer_ptr = NULL;
 /* pflog */
 pflog_packet_t			*pflog_packet_ptr = NULL;
 
-static void
-pfattach_vnet(void)
+static int
+pfattach(void)
 {
 	u_int32_t *my_timeout = V_pf_default_rule.timeout;
+	int error;
 
+	if (IS_DEFAULT_VNET(curvnet))
+		pf_mtag_initialize();
 	pf_initialize();
 	pfr_initialize();
-	pfi_initialize_vnet();
+	pfi_initialize();
 	pf_normalize_init();
 
 	V_pf_limits[PF_LIMIT_STATES].limit = PFSTATE_HIWAT;
@@ -281,12 +276,17 @@ pfattach_vnet(void)
 	for (int i = 0; i < SCNT_MAX; i++)
 		V_pf_status.scounters[i] = counter_u64_alloc(M_WAITOK);
 
-	if (swi_add(NULL, "pf send", pf_intr, curvnet, SWI_NET,
-	    INTR_MPSAFE, &V_pf_swi_cookie) != 0)
+	if ((error = kproc_create(pf_purge_thread, curvnet, NULL, 0, 0,
+	    "pf purge")) != 0)
 		/* XXXGL: leaked all above. */
-		return;
-}
+		return (error);
+	if ((error = swi_add(NULL, "pf send", pf_intr, curvnet, SWI_NET,
+	    INTR_MPSAFE, &V_pf_swi_cookie)) != 0)
+		/* XXXGL: leaked all above. */
+		return (error);
 
+	return (0);
+}
 
 static struct pf_pool *
 pf_get_pool(char *anchor, u_int32_t ticket, u_int8_t rule_action,
@@ -1242,10 +1242,6 @@ pfioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags, struct thread *td
 			error = ENOMEM;
 		if (pf_anchor_setup(rule, ruleset, pr->anchor_call))
 			error = EINVAL;
-		if (rule->scrub_flags & PFSTATE_SETPRIO &&
-		    (rule->set_prio[0] > PF_PRIO_MAX ||
-		    rule->set_prio[1] > PF_PRIO_MAX))
-			error = EINVAL;
 		TAILQ_FOREACH(pa, &V_pf_pabuf, entries)
 			if (pa->addr.type == PF_ADDR_TABLE) {
 				pa->addr.p.tbl = pfr_attach_table(ruleset,
@@ -1254,7 +1250,6 @@ pfioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags, struct thread *td
 					error = ENOMEM;
 			}
 
-		rule->overload_tbl = NULL;
 		if (rule->overload_tblname[0]) {
 			if ((rule->overload_tbl = pfr_attach_table(ruleset,
 			    rule->overload_tblname)) == NULL)
@@ -1512,7 +1507,6 @@ DIOCADDRULE_error:
 						error = ENOMEM;
 				}
 
-			newrule->overload_tbl = NULL;
 			if (newrule->overload_tblname[0]) {
 				if ((newrule->overload_tbl = pfr_attach_table(
 				    ruleset, newrule->overload_tblname)) ==
@@ -3362,7 +3356,7 @@ relock:
 		LIST_FOREACH(s, &ih->states, entry) {
 			s->timeout = PFTM_PURGE;
 			/* Don't send out individual delete messages. */
-			s->state_flags |= PFSTATE_NOSYNC;
+			s->sync_state = PFSTATE_NOSYNC;
 			pf_unlink_state(s, PF_ENTER_LOCKED);
 			goto relock;
 		}
@@ -3480,6 +3474,21 @@ shutdown_pf(void)
 	u_int32_t t[5];
 	char nn = '\0';
 
+	V_pf_status.running = 0;
+
+	counter_u64_free(V_pf_default_rule.states_cur);
+	counter_u64_free(V_pf_default_rule.states_tot);
+	counter_u64_free(V_pf_default_rule.src_nodes);
+
+	for (int i = 0; i < PFRES_MAX; i++)
+		counter_u64_free(V_pf_status.counters[i]);
+	for (int i = 0; i < LCNT_MAX; i++)
+		counter_u64_free(V_pf_status.lcounters[i]);
+	for (int i = 0; i < FCNT_MAX; i++)
+		counter_u64_free(V_pf_status.fcounters[i]);
+	for (int i = 0; i < SCNT_MAX; i++)
+		counter_u64_free(V_pf_status.scounters[i]);
+
 	do {
 		if ((error = pf_begin_rules(&t[0], PF_RULESET_SCRUB, &nn))
 		    != 0) {
@@ -3531,20 +3540,6 @@ shutdown_pf(void)
 
 		/* status does not use malloced mem so no need to cleanup */
 		/* fingerprints and interfaces have their own cleanup code */
-
-		/* Free counters last as we updated them during shutdown. */
-		counter_u64_free(V_pf_default_rule.states_cur);
-		counter_u64_free(V_pf_default_rule.states_tot);
-		counter_u64_free(V_pf_default_rule.src_nodes);
-
-		for (int i = 0; i < PFRES_MAX; i++)
-			counter_u64_free(V_pf_status.counters[i]);
-		for (int i = 0; i < LCNT_MAX; i++)
-			counter_u64_free(V_pf_status.lcounters[i]);
-		for (int i = 0; i < FCNT_MAX; i++)
-			counter_u64_free(V_pf_status.fcounters[i]);
-		for (int i = 0; i < SCNT_MAX; i++)
-			counter_u64_free(V_pf_status.scounters[i]);
 	} while(0);
 
 	return (error);
@@ -3696,55 +3691,39 @@ dehook_pf(void)
 	return (0);
 }
 
-static void
-pf_load_vnet(void)
+static int
+pf_load(void)
 {
+	int error;
+
 	VNET_ITERATOR_DECL(vnet_iter);
 
 	VNET_LIST_RLOCK();
 	VNET_FOREACH(vnet_iter) {
 		CURVNET_SET(vnet_iter);
 		V_pf_pfil_hooked = 0;
+		V_pf_end_threads = 0;
 		TAILQ_INIT(&V_pf_tags);
 		TAILQ_INIT(&V_pf_qids);
 		CURVNET_RESTORE();
 	}
 	VNET_LIST_RUNLOCK();
 
-	pfattach_vnet();
-	V_pf_vnet_active = 1;
-}
-
-static int
-pf_load(void)
-{
-	int error;
-
 	rw_init(&pf_rules_lock, "pf rulesets");
 	sx_init(&pf_ioctl_lock, "pf ioctl");
 
-	pf_mtag_initialize();
-
 	pf_dev = make_dev(&pf_cdevsw, 0, 0, 0, 0600, PF_NAME);
-	if (pf_dev == NULL)
-		return (ENOMEM);
-
-	pf_end_threads = 0;
-	error = kproc_create(pf_purge_thread, NULL, NULL, 0, 0, "pf purge");
-	if (error != 0)
+	if ((error = pfattach()) != 0)
 		return (error);
-
-	pfi_initialize();
 
 	return (0);
 }
 
-static void
-pf_unload_vnet(void)
+static int
+pf_unload(void)
 {
-	int error;
+	int error = 0;
 
-	V_pf_vnet_active = 0;
 	V_pf_status.running = 0;
 	swi_remove(V_pf_swi_cookie);
 	error = dehook_pf();
@@ -3755,66 +3734,29 @@ pf_unload_vnet(void)
 		 * a message like 'No such process'.
 		 */
 		printf("%s : pfil unregisteration fail\n", __FUNCTION__);
-		return;
+		return error;
 	}
-
-	pf_unload_vnet_purge();
-
 	PF_RULES_WLOCK();
 	shutdown_pf();
+	V_pf_end_threads = 1;
+	while (V_pf_end_threads < 2) {
+		wakeup_one(pf_purge_thread);
+		rw_sleep(pf_purge_thread, &pf_rules_lock, 0, "pftmo", 0);
+	}
 	PF_RULES_WUNLOCK();
-
 	pf_normalize_cleanup();
-	PF_RULES_WLOCK();
-	pfi_cleanup_vnet();
-	PF_RULES_WUNLOCK();
+	pfi_cleanup();
 	pfr_cleanup();
 	pf_osfp_flush();
 	pf_cleanup();
 	if (IS_DEFAULT_VNET(curvnet))
 		pf_mtag_cleanup();
-}
-
-static int
-pf_unload(void)
-{
-	int error = 0;
-
-	pf_end_threads = 1;
-	while (pf_end_threads < 2) {
-		wakeup_one(pf_purge_thread);
-		rw_sleep(pf_purge_thread, &pf_rules_lock, 0, "pftmo", 0);
-	}
-
-	if (pf_dev != NULL)
-		destroy_dev(pf_dev);
-
-	pfi_cleanup();
-
+	destroy_dev(pf_dev);
 	rw_destroy(&pf_rules_lock);
 	sx_destroy(&pf_ioctl_lock);
 
 	return (error);
 }
-
-static void
-vnet_pf_init(void *unused __unused)
-{
-
-	pf_load_vnet();
-}
-VNET_SYSINIT(vnet_pf_init, SI_SUB_PROTO_FIREWALL, SI_ORDER_THIRD, 
-    vnet_pf_init, NULL);
-
-static void
-vnet_pf_uninit(const void *unused __unused)
-{
-
-	pf_unload_vnet();
-} 
-VNET_SYSUNINIT(vnet_pf_uninit, SI_SUB_PROTO_FIREWALL, SI_ORDER_THIRD,
-    vnet_pf_uninit, NULL);
-
 
 static int
 pf_modevent(module_t mod, int type, void *data)
@@ -3848,5 +3790,5 @@ static moduledata_t pf_mod = {
 	0
 };
 
-DECLARE_MODULE(pf, pf_mod, SI_SUB_PROTO_FIREWALL, SI_ORDER_SECOND);
+DECLARE_MODULE(pf, pf_mod, SI_SUB_PSEUDO, SI_ORDER_FIRST);
 MODULE_VERSION(pf, PF_MODVER);

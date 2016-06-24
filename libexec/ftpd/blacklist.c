@@ -48,6 +48,8 @@ void
 blacklist_notify(int action, int fd, char *msg)
 {
 	if (blstate == NULL)
+		blacklist_init();
+	if (blstate == NULL)
 		return;
 	(void)blacklist_r(blstate, action, fd, msg);
 }

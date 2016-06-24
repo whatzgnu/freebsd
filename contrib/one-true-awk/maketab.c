@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
 		table[p->token-FIRSTTOKEN] = p->name;
 	printf("\nCell *(*proctab[%d])(Node **, int) = {\n", SIZE);
 	for (i=0; i<SIZE; i++)
-		if (table[i]==NULL)
+		if (table[i]==0)
 			printf("\tnullproc,\t/* %s */\n", names[i]);
 		else
 			printf("\t%s,\t/* %s */\n", table[i], names[i]);

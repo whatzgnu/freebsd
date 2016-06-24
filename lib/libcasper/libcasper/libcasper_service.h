@@ -40,25 +40,21 @@ struct nvlist;
 typedef struct nvlist nvlist_t;
 #endif
 
-#define	CASPER_SERVICE_STDIO		0x00000001
-#define	CASPER_SERVICE_FD		0x00000002
-
 typedef int service_limit_func_t(const nvlist_t *, const nvlist_t *);
 typedef int service_command_func_t(const char *cmd, const nvlist_t *,
     nvlist_t *, nvlist_t *);
 
 struct casper_service *service_register(const char *name,
-    service_limit_func_t *limitfunc, service_command_func_t *commandfunc,
-    uint64_t flags);
+    service_limit_func_t *limitfunc, service_command_func_t *commandfunc);
 
 #define	__constructor	__attribute__((constructor))
-#define	CREATE_SERVICE(name, limit_func, command_func, flags)		\
+#define	CREATE_SERVICE(name, limit_func, command_func)			\
 	static __constructor void					\
 	init_casper_service(void)					\
 	{								\
 									\
-		(void)service_register(name, limit_func, command_func,  \
-		    flags);						\
+		(void)service_register(name, limit_func,		\
+		    command_func);					\
 	}
 
 #endif	/* !_LIBCASPER_SERVICE_H_ */

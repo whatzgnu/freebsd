@@ -33,6 +33,7 @@
 __FBSDID("$FreeBSD$");
 
 #include "opt_bootp.h"
+#include "opt_ipfw.h"
 #include "opt_ipstealth.h"
 #include "opt_ipsec.h"
 #include "opt_route.h"
@@ -363,7 +364,6 @@ ip_init(void)
 void
 ip_destroy(void)
 {
-	struct ifnet *ifp;
 	int error;
 
 	if ((error = pfil_head_unregister(&V_inet_pfil_hook)) != 0)
@@ -382,21 +382,11 @@ ip_destroy(void)
 		    "type HHOOK_TYPE_IPSEC_OUT, id HHOOK_IPSEC_INET: "
 		    "error %d returned\n", __func__, error);
 	}
-
-	/* Remove the IPv4 addresses from all interfaces. */
-	in_ifscrub_all();
-
-	/* Make sure the IPv4 routes are gone as well. */
-	IFNET_RLOCK();
-	TAILQ_FOREACH(ifp, &V_ifnet, if_link)
-		rt_flushifroutes_af(ifp, AF_INET);
-	IFNET_RUNLOCK();
+	/* Cleanup in_ifaddr hash table; should be empty. */
+	hashdestroy(V_in_ifaddrhashtbl, M_IFADDR, V_in_ifaddrhmask);
 
 	/* Destroy IP reassembly queue. */
 	ipreass_destroy();
-
-	/* Cleanup in_ifaddr hash table; should be empty. */
-	hashdestroy(V_in_ifaddrhashtbl, M_IFADDR, V_in_ifaddrhmask);
 }
 #endif
 

@@ -1922,10 +1922,9 @@ mps_intr_locked(void *data)
 					 */
 					rel_rep =
 					    (MPI2_DIAG_RELEASE_REPLY *)reply;
-					if ((le16toh(rel_rep->IOCStatus) &
-					    MPI2_IOCSTATUS_MASK) ==
+					if (le16toh(rel_rep->IOCStatus) ==
 					    MPI2_IOCSTATUS_DIAGNOSTIC_RELEASED)
-					{
+					    {
 						pBuffer =
 						    &sc->fw_diag_buffer_list[
 						    rel_rep->BufferType];

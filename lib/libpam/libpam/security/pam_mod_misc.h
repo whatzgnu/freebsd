@@ -39,17 +39,18 @@
 #define PAM_OPT_ECHO_PASS	"echo_pass"
 #define PAM_OPT_DEBUG		"debug"
 
-#define	PAM_LOG(...)							\
+__BEGIN_DECLS
+void	_pam_verbose_error(pam_handle_t *, int, const char *,
+		const char *, const char *, ...);
+__END_DECLS
+
+#define	PAM_LOG(...) \
 	openpam_log(PAM_LOG_DEBUG, __VA_ARGS__)
 
-#define PAM_RETURN(arg)							\
+#define PAM_RETURN(arg) \
 	return (arg)
 
-#define PAM_VERBOSE_ERROR(...)						\
-	do {								\
-		if (!(flags & PAM_SILENT) &&				\
-		    !openpam_get_option(pamh, "no_warn"))		\
-			pam_error(pamh, __VA_ARGS__);			\
-	} while (0);
+#define PAM_VERBOSE_ERROR(...) \
+	_pam_verbose_error(pamh, flags, __FILE__, __func__, __VA_ARGS__)
 
 #endif

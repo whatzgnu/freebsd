@@ -222,11 +222,11 @@ mlx5e_build_rx_mbuf(struct mlx5_cqe64 *cqe,
 			M_HASHTYPE_SET(mb, M_HASHTYPE_RSS_IPV6);
 			break;
 		default:	/* Other */
-			M_HASHTYPE_SET(mb, M_HASHTYPE_OPAQUE_HASH);
+			M_HASHTYPE_SET(mb, M_HASHTYPE_OPAQUE);
 			break;
 		}
 #else
-		M_HASHTYPE_SET(mb, M_HASHTYPE_OPAQUE_HASH);
+		M_HASHTYPE_SET(mb, M_HASHTYPE_OPAQUE);
 #endif
 	} else {
 		mb->m_pkthdr.flowid = rq->ix;

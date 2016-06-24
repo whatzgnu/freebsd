@@ -73,7 +73,7 @@ service_find(const char *name)
 
 struct casper_service *
 service_register(const char *name, service_limit_func_t *limitfunc,
-   service_command_func_t *commandfunc, uint64_t flags)
+   service_command_func_t *commandfunc)
 {
 	struct casper_service *casserv;
 
@@ -88,8 +88,7 @@ service_register(const char *name, service_limit_func_t *limitfunc,
 	if (casserv == NULL)
 		return (NULL);
 
-	casserv->cs_service = service_alloc(name, limitfunc, commandfunc,
-	    flags);
+	casserv->cs_service = service_alloc(name, limitfunc, commandfunc);
 	if (casserv->cs_service == NULL) {
 		free(casserv);
 		return (NULL);
@@ -142,10 +141,11 @@ service_execute(int chanfd)
 		exit(1);
 	service = (struct service *)(uintptr_t)nvlist_take_number(nvl,
 	    "service");
+	//XXX: We should remove this?
 	procfd = nvlist_take_descriptor(nvl, "procfd");
 	nvlist_destroy(nvl);
 
-	service_start(service, chanfd, procfd);
+	service_start(service, chanfd);
 	/* Not reached. */
 	exit(1);
 }
@@ -199,7 +199,7 @@ service_register_core(int fd)
 	struct service_connection *sconn;
 
 	casserv = service_register(CORE_CASPER_NAME, casper_limit,
-	    casper_command, 0);
+	    casper_command);
 	sconn = service_connection_add(casserv->cs_service, fd, NULL);
 	if (sconn == NULL) {
 		close(fd);

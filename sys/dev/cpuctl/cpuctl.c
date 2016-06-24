@@ -67,9 +67,9 @@ static d_ioctl_t cpuctl_ioctl;
 
 static int cpuctl_do_msr(int cpu, cpuctl_msr_args_t *data, u_long cmd,
     struct thread *td);
-static int cpuctl_do_cpuid(int cpu, cpuctl_cpuid_args_t *data,
+static void cpuctl_do_cpuid(int cpu, cpuctl_cpuid_args_t *data,
     struct thread *td);
-static int cpuctl_do_cpuid_count(int cpu, cpuctl_cpuid_count_args_t *data,
+static void cpuctl_do_cpuid_count(int cpu, cpuctl_cpuid_count_args_t *data,
     struct thread *td);
 static int cpuctl_do_update(int cpu, cpuctl_update_args_t *data,
     struct thread *td);
@@ -171,7 +171,8 @@ cpuctl_ioctl(struct cdev *dev, u_long cmd, caddr_t data,
 		ret = cpuctl_do_msr(cpu, (cpuctl_msr_args_t *)data, cmd, td);
 		break;
 	case CPUCTL_CPUID:
-		ret = cpuctl_do_cpuid(cpu, (cpuctl_cpuid_args_t *)data, td);
+		cpuctl_do_cpuid(cpu, (cpuctl_cpuid_args_t *)data, td);
+		ret = 0;
 		break;
 	case CPUCTL_UPDATE:
 		ret = priv_check(td, PRIV_CPUCTL_UPDATE);
@@ -180,8 +181,9 @@ cpuctl_ioctl(struct cdev *dev, u_long cmd, caddr_t data,
 		ret = cpuctl_do_update(cpu, (cpuctl_update_args_t *)data, td);
 		break;
 	case CPUCTL_CPUID_COUNT:
-		ret = cpuctl_do_cpuid_count(cpu,
-		    (cpuctl_cpuid_count_args_t *)data, td);
+		cpuctl_do_cpuid_count(cpu, (cpuctl_cpuid_count_args_t *)data,
+		    td);
+		ret = 0;
 		break;
 	default:
 		ret = EINVAL;
@@ -194,7 +196,7 @@ fail:
 /*
  * Actually perform cpuid operation.
  */
-static int
+static void
 cpuctl_do_cpuid_count(int cpu, cpuctl_cpuid_count_args_t *data,
     struct thread *td)
 {
@@ -208,30 +210,23 @@ cpuctl_do_cpuid_count(int cpu, cpuctl_cpuid_count_args_t *data,
 	bzero(data->data, sizeof(data->data));
 	DPRINTF("[cpuctl,%d]: retrieving cpuid lev %#0x type %#0x for %d cpu\n",
 	    __LINE__, data->level, data->level_type, cpu);
-#ifdef __i386__
-	if (cpu_id == 0)
-		return (ENODEV);
-#endif
 	oldcpu = td->td_oncpu;
 	is_bound = cpu_sched_is_bound(td);
 	set_cpu(cpu, td);
 	cpuid_count(data->level, data->level_type, data->data);
 	restore_cpu(oldcpu, is_bound, td);
-	return (0);
 }
 
-static int
+static void
 cpuctl_do_cpuid(int cpu, cpuctl_cpuid_args_t *data, struct thread *td)
 {
 	cpuctl_cpuid_count_args_t cdata;
-	int error;
 
 	cdata.level = data->level;
 	/* Override the level type. */
 	cdata.level_type = 0;
-	error = cpuctl_do_cpuid_count(cpu, &cdata, td);
+	cpuctl_do_cpuid_count(cpu, &cdata, td);
 	bcopy(cdata.data, data->data, sizeof(data->data)); /* Ignore error */
-	return (error);
 }
 
 /*
@@ -254,10 +249,6 @@ cpuctl_do_msr(int cpu, cpuctl_msr_args_t *data, u_long cmd, struct thread *td)
 	 */
 	DPRINTF("[cpuctl,%d]: operating on MSR %#0x for %d cpu\n", __LINE__,
 	    data->msr, cpu);
-#ifdef __i386__
-	if ((cpu_feature & CPUID_MSR) == 0)
-		return (ENODEV);
-#endif
 	oldcpu = td->td_oncpu;
 	is_bound = cpu_sched_is_bound(td);
 	set_cpu(cpu, td);
@@ -300,9 +291,7 @@ cpuctl_do_update(int cpu, cpuctl_update_args_t *data, struct thread *td)
 	    ("[cpuctl,%d]: bad cpu number %d", __LINE__, cpu));
 	DPRINTF("[cpuctl,%d]: XXX %d", __LINE__, cpu);
 
-	ret = cpuctl_do_cpuid(cpu, &args, td);
-	if (ret != 0)
-		return (ret);
+	cpuctl_do_cpuid(cpu, &args, td);
 	((uint32_t *)vendor)[0] = args.data[1];
 	((uint32_t *)vendor)[1] = args.data[3];
 	((uint32_t *)vendor)[2] = args.data[2];
@@ -529,6 +518,11 @@ cpuctl_modevent(module_t mod __unused, int type, void *data __unused)
 
 	switch(type) {
 	case MOD_LOAD:
+		if ((cpu_feature & CPUID_MSR) == 0) {
+			if (bootverbose)
+				printf("cpuctl: not available.\n");
+			return (ENODEV);
+		}
 		if (bootverbose)
 			printf("cpuctl: access to MSR registers/cpuid info.\n");
 		cpuctl_devs = malloc(sizeof(*cpuctl_devs) * mp_ncpus, M_CPUCTL,

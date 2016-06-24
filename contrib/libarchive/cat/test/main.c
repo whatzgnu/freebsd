@@ -2534,36 +2534,18 @@ usage(const char *program)
 static char *
 get_refdir(const char *d)
 {
-	size_t tried_size, buff_size;
-	char *buff, *tried, *pwd = NULL, *p = NULL;
-
-#ifdef PATH_MAX
-	buff_size = PATH_MAX;
-#else
-	buff_size = 8192;
-#endif
-	buff = calloc(buff_size, 1);
-	if (buff == NULL) {
-		fprintf(stderr, "Unable to allocate memory\n");
-		exit(1);
-	}
-
-	/* Allocate a buffer to hold the various directories we checked. */
-	tried_size = buff_size * 2;
-	tried = calloc(tried_size, 1);
-	if (tried == NULL) {
-		fprintf(stderr, "Unable to allocate memory\n");
-		exit(1);
-	}
+	char tried[512] = { '\0' };
+	char buff[128];
+	char *pwd, *p;
 
 	/* If a dir was specified, try that */
 	if (d != NULL) {
 		pwd = NULL;
-		snprintf(buff, buff_size, "%s", d);
+		snprintf(buff, sizeof(buff), "%s", d);
 		p = slurpfile(NULL, "%s/%s", buff, KNOWNREF);
 		if (p != NULL) goto success;
-		strncat(tried, buff, tried_size - strlen(tried) - 1);
-		strncat(tried, "\n", tried_size - strlen(tried) - 1);
+		strncat(tried, buff, sizeof(tried) - strlen(tried) - 1);
+		strncat(tried, "\n", sizeof(tried) - strlen(tried) - 1);
 		goto failure;
 	}
 
@@ -2577,48 +2559,48 @@ get_refdir(const char *d)
 		pwd[strlen(pwd) - 1] = '\0';
 
 	/* Look for a known file. */
-	snprintf(buff, buff_size, "%s", pwd);
+	snprintf(buff, sizeof(buff), "%s", pwd);
 	p = slurpfile(NULL, "%s/%s", buff, KNOWNREF);
 	if (p != NULL) goto success;
-	strncat(tried, buff, tried_size - strlen(tried) - 1);
-	strncat(tried, "\n", tried_size - strlen(tried) - 1);
+	strncat(tried, buff, sizeof(tried) - strlen(tried) - 1);
+	strncat(tried, "\n", sizeof(tried) - strlen(tried) - 1);
 
-	snprintf(buff, buff_size, "%s/test", pwd);
+	snprintf(buff, sizeof(buff), "%s/test", pwd);
 	p = slurpfile(NULL, "%s/%s", buff, KNOWNREF);
 	if (p != NULL) goto success;
-	strncat(tried, buff, tried_size - strlen(tried) - 1);
-	strncat(tried, "\n", tried_size - strlen(tried) - 1);
+	strncat(tried, buff, sizeof(tried) - strlen(tried) - 1);
+	strncat(tried, "\n", sizeof(tried) - strlen(tried) - 1);
 
 #if defined(LIBRARY)
-	snprintf(buff, buff_size, "%s/%s/test", pwd, LIBRARY);
+	snprintf(buff, sizeof(buff), "%s/%s/test", pwd, LIBRARY);
 #else
-	snprintf(buff, buff_size, "%s/%s/test", pwd, PROGRAM);
+	snprintf(buff, sizeof(buff), "%s/%s/test", pwd, PROGRAM);
 #endif
 	p = slurpfile(NULL, "%s/%s", buff, KNOWNREF);
 	if (p != NULL) goto success;
-	strncat(tried, buff, tried_size - strlen(tried) - 1);
-	strncat(tried, "\n", tried_size - strlen(tried) - 1);
+	strncat(tried, buff, sizeof(tried) - strlen(tried) - 1);
+	strncat(tried, "\n", sizeof(tried) - strlen(tried) - 1);
 
 #if defined(PROGRAM_ALIAS)
-	snprintf(buff, buff_size, "%s/%s/test", pwd, PROGRAM_ALIAS);
+	snprintf(buff, sizeof(buff), "%s/%s/test", pwd, PROGRAM_ALIAS);
 	p = slurpfile(NULL, "%s/%s", buff, KNOWNREF);
 	if (p != NULL) goto success;
-	strncat(tried, buff, tried_size - strlen(tried) - 1);
-	strncat(tried, "\n", tried_size - strlen(tried) - 1);
+	strncat(tried, buff, sizeof(tried) - strlen(tried) - 1);
+	strncat(tried, "\n", sizeof(tried) - strlen(tried) - 1);
 #endif
 
 	if (memcmp(pwd, "/usr/obj", 8) == 0) {
-		snprintf(buff, buff_size, "%s", pwd + 8);
+		snprintf(buff, sizeof(buff), "%s", pwd + 8);
 		p = slurpfile(NULL, "%s/%s", buff, KNOWNREF);
 		if (p != NULL) goto success;
-		strncat(tried, buff, tried_size - strlen(tried) - 1);
-		strncat(tried, "\n", tried_size - strlen(tried) - 1);
+		strncat(tried, buff, sizeof(tried) - strlen(tried) - 1);
+		strncat(tried, "\n", sizeof(tried) - strlen(tried) - 1);
 
-		snprintf(buff, buff_size, "%s/test", pwd + 8);
+		snprintf(buff, sizeof(buff), "%s/test", pwd + 8);
 		p = slurpfile(NULL, "%s/%s", buff, KNOWNREF);
 		if (p != NULL) goto success;
-		strncat(tried, buff, tried_size - strlen(tried) - 1);
-		strncat(tried, "\n", tried_size - strlen(tried) - 1);
+		strncat(tried, buff, sizeof(tried) - strlen(tried) - 1);
+		strncat(tried, "\n", sizeof(tried) - strlen(tried) - 1);
 	}
 
 failure:
@@ -2633,12 +2615,7 @@ failure:
 success:
 	free(p);
 	free(pwd);
-	free(tried);
-
-	/* Copy result into a fresh buffer to reduce memory usage. */
-	p = strdup(buff);
-	free(buff);
-	return p;
+	return strdup(buff);
 }
 
 int

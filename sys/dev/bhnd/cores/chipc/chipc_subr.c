@@ -150,10 +150,9 @@ chipc_alloc_region(struct chipc_softc *sc, bhnd_port_type type,
 
 	cr->cr_end = cr->cr_addr + cr->cr_count - 1;
 
-	/* Fetch default resource ID for this region. Not all regions have an
-	 * assigned rid, in which case this will return -1 */
+	/* Note that not all regions have an assigned rid, in which case
+	 * this will return -1 */
 	cr->cr_rid = bhnd_get_port_rid(sc->dev, type, port, region);
-
 	return (cr);
 
 failed:
@@ -178,7 +177,7 @@ chipc_free_region(struct chipc_softc *sc, struct chipc_region *cr)
 	     cr->cr_region_num, cr->cr_refs));
 
 	if (cr->cr_res != NULL) {
-		bhnd_release_resource(sc->dev, SYS_RES_MEMORY, cr->cr_res_rid,
+		bhnd_release_resource(sc->dev, SYS_RES_MEMORY, cr->cr_rid,
 		    cr->cr_res);
 	}
 
@@ -265,16 +264,10 @@ chipc_retain_region(struct chipc_softc *sc, struct chipc_region *cr, int flags)
 			KASSERT(cr->cr_res == NULL,
 			    ("non-NULL resource has refcount"));
 
-			/* Fetch initial resource ID */			
-			if ((cr->cr_res_rid = cr->cr_rid) == -1) {
-				CHIPC_UNLOCK(sc);
-				return (EINVAL);
-			}
-
-			/* Allocate resource */
 			cr->cr_res = bhnd_alloc_resource(sc->dev,
-			    SYS_RES_MEMORY, &cr->cr_res_rid, cr->cr_addr,
+			    SYS_RES_MEMORY, &cr->cr_rid, cr->cr_addr,
 			    cr->cr_end, cr->cr_count, 0);
+
 			if (cr->cr_res == NULL) {
 				CHIPC_UNLOCK(sc);
 				return (ENXIO);
@@ -294,7 +287,7 @@ chipc_retain_region(struct chipc_softc *sc, struct chipc_region *cr, int flags)
 		/* If this is the first reference, activate the resource */
 		if (cr->cr_act_refs == 0) {
 			error = bhnd_activate_resource(sc->dev, SYS_RES_MEMORY,
-			    cr->cr_res_rid, cr->cr_res);
+			    cr->cr_rid, cr->cr_res);
 			if (error) {
 				/* Drop any allocation reference acquired
 				 * above */
@@ -331,8 +324,6 @@ chipc_release_region(struct chipc_softc *sc, struct chipc_region *cr,
 	CHIPC_LOCK(sc);
 	error = 0;
 
-	KASSERT(cr->cr_res != NULL, ("release on NULL region resource"));
-
 	if (flags & RF_ACTIVE) {
 		KASSERT(cr->cr_act_refs > 0, ("RF_ACTIVE over-released"));
 		KASSERT(cr->cr_act_refs <= cr->cr_refs,
@@ -341,7 +332,7 @@ chipc_release_region(struct chipc_softc *sc, struct chipc_region *cr,
 		/* If this is the last reference, deactivate the resource */
 		if (cr->cr_act_refs == 1) {
 			error = bhnd_deactivate_resource(sc->dev,
-			    SYS_RES_MEMORY, cr->cr_res_rid, cr->cr_res);
+			    SYS_RES_MEMORY, cr->cr_rid, cr->cr_res);
 			if (error)
 				goto done;
 		}
@@ -352,14 +343,16 @@ chipc_release_region(struct chipc_softc *sc, struct chipc_region *cr,
 
 	if (flags & RF_ALLOCATED) {
 		KASSERT(cr->cr_refs > 0, ("overrelease of refs"));
+
 		/* If this is the last reference, release the resource */
 		if (cr->cr_refs == 1) {
-			error = bhnd_release_resource(sc->dev, SYS_RES_MEMORY,
-			    cr->cr_res_rid, cr->cr_res);
+			error = bhnd_release_resource(sc->dev,
+			    SYS_RES_MEMORY, cr->cr_rid, cr->cr_res);
 			if (error)
 				goto done;
 
 			cr->cr_res = NULL;
+			cr->cr_rid = -1;
 		}
 
 		/* Drop our allocation refcount */

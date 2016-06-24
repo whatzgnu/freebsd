@@ -1423,10 +1423,6 @@ ucl_msgpack_parse_int (struct ucl_parser *parser,
 	int16_t iv16;
 	int32_t iv32;
 	int64_t iv64;
-	uint16_t uiv16;
-	uint32_t uiv32;
-	uint64_t uiv64;
-
 
 	if (len > remain) {
 		return -1;
@@ -1459,9 +1455,7 @@ ucl_msgpack_parse_int (struct ucl_parser *parser,
 		len = 2;
 		break;
 	case msgpack_uint16:
-		memcpy (&uiv16, pos, sizeof (uiv16));
-		uiv16 = FROM_BE16 (uiv16);
-		obj->value.iv = uiv16;
+		obj->value.iv = FROM_BE16 (*(uint16_t *)pos);
 		len = 2;
 		break;
 	case msgpack_int32:
@@ -1471,9 +1465,7 @@ ucl_msgpack_parse_int (struct ucl_parser *parser,
 		len = 4;
 		break;
 	case msgpack_uint32:
-		memcpy(&uiv32, pos, sizeof(uiv32));
-		uiv32 = FROM_BE32(uiv32);
-		obj->value.iv = uiv32;
+		obj->value.iv = FROM_BE32 (*(uint32_t *)pos);
 		len = 4;
 		break;
 	case msgpack_int64:
@@ -1483,9 +1475,7 @@ ucl_msgpack_parse_int (struct ucl_parser *parser,
 		len = 8;
 		break;
 	case msgpack_uint64:
-		memcpy(&uiv64, pos, sizeof(uiv64));
-		uiv64 = FROM_BE64(uiv64);
-		obj->value.iv = uiv64;
+		obj->value.iv = FROM_BE64 (*(uint64_t *)pos);
 		len = 8;
 		break;
 	default:
@@ -1508,7 +1498,6 @@ ucl_msgpack_parse_float (struct ucl_parser *parser,
 		uint32_t i;
 		float f;
 	} d;
-	uint64_t uiv64;
 
 	if (len > remain) {
 		return -1;
@@ -1518,16 +1507,13 @@ ucl_msgpack_parse_float (struct ucl_parser *parser,
 
 	switch (fmt) {
 	case msgpack_float32:
-		memcpy(&d.i, pos, sizeof(d.i));
-		d.i = FROM_BE32(d.i);
+		d.i = FROM_BE32 (*(uint32_t *)pos);
 		/* XXX: can be slow */
 		obj->value.dv = d.f;
 		len = 4;
 		break;
 	case msgpack_float64:
-		memcpy(&uiv64, pos, sizeof(uiv64));
-		uiv64 = FROM_BE64(uiv64);
-		obj->value.iv = uiv64;
+		obj->value.iv = FROM_BE64 (*(uint64_t *)pos);
 		len = 8;
 		break;
 	default:

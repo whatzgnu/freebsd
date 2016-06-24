@@ -167,20 +167,6 @@ main(int argc, char **argv)
 	if (sq == NULL)
 		err(1, "geom_stats_snapshot()");
 	if (!flag_b) {
-		/* Setup libedit */
-		hist = history_init();
-		if (hist == NULL)
-			err(EX_SOFTWARE, "history_init()");
-		history(hist, &hist_ev, H_SETSIZE, 100);
-		el = el_init("gstat", stdin, stdout, stderr);
-		if (el == NULL)
-			err(EX_SOFTWARE, "el_init");
-		el_set(el, EL_EDITOR, "emacs");
-		el_set(el, EL_SIGNAL, 1);
-		el_set(el, EL_HIST, history, hist);
-		el_set(el, EL_PROMPT, el_prompt);
-		if (f_s[0] != '\0')
-			history(hist, &hist_ev, H_ENTER, f_s);
 		/* Setup curses */
 		initscr();
 		start_color();
@@ -195,6 +181,20 @@ main(int argc, char **argv)
 		nodelay(stdscr, 1);
 		intrflush(stdscr, FALSE);
 		keypad(stdscr, TRUE);
+		/* Setup libedit */
+		hist = history_init();
+		if (hist == NULL)
+			err(EX_SOFTWARE, "history_init()");
+		history(hist, &hist_ev, H_SETSIZE, 100);
+		el = el_init("gstat", stdin, stdout, stderr);
+		if (el == NULL)
+			err(EX_SOFTWARE, "el_init");
+		el_set(el, EL_EDITOR, "emacs");
+		el_set(el, EL_SIGNAL, 1);
+		el_set(el, EL_HIST, history, hist);
+		el_set(el, EL_PROMPT, el_prompt);
+		if (f_s[0] != '\0')
+			history(hist, &hist_ev, H_ENTER, f_s);
 	}
 	geom_stats_snapshot_timestamp(sq, &tq);
 	for (quit = 0; !quit;) {
@@ -410,15 +410,12 @@ main(int argc, char **argv)
 				if ((p = strchr(tmp_f_s, '\n')) != NULL)
 					*p = '\0';
 				/*
-				 * Fix the terminal.  We messed up
+				 * We have to clear since we messed up
 				 * curses idea of the screen by using
 				 * libedit.
 				 */
 				clear();
 				refresh();
-				cbreak();
-				noecho();
-				nonl();
 				if (regcomp(&tmp_f_re, tmp_f_s, REG_EXTENDED)
 				    != 0) {
 					move(0, 0);
@@ -443,8 +440,8 @@ main(int argc, char **argv)
 	}
 
 	if (!flag_b) {
-		el_end(el);
 		endwin();
+		el_end(el);
 	}
 	exit(EX_OK);
 }

@@ -1220,14 +1220,12 @@ mps_post_fw_diag_buffer(struct mps_softc *sc,
 	 * Process POST reply.
 	 */
 	reply = (MPI2_DIAG_BUFFER_POST_REPLY *)cm->cm_reply;
-	if ((le16toh(reply->IOCStatus) & MPI2_IOCSTATUS_MASK) !=
-	    MPI2_IOCSTATUS_SUCCESS) {
+	if (reply->IOCStatus != MPI2_IOCSTATUS_SUCCESS) {
 		status = MPS_DIAG_FAILURE;
 		mps_dprint(sc, MPS_FAULT, "%s: post of FW  Diag Buffer failed "
 		    "with IOCStatus = 0x%x, IOCLogInfo = 0x%x and "
-		    "TransferLength = 0x%x\n", __func__,
-		    le16toh(reply->IOCStatus), le32toh(reply->IOCLogInfo),
-		    le32toh(reply->TransferLength));
+		    "TransferLength = 0x%x\n", __func__, reply->IOCStatus,
+		    reply->IOCLogInfo, reply->TransferLength);
 		goto done;
 	}
 
@@ -1306,13 +1304,12 @@ mps_release_fw_diag_buffer(struct mps_softc *sc,
 	 * Process RELEASE reply.
 	 */
 	reply = (MPI2_DIAG_RELEASE_REPLY *)cm->cm_reply;
-	if (((le16toh(reply->IOCStatus) & MPI2_IOCSTATUS_MASK) !=
-	    MPI2_IOCSTATUS_SUCCESS) || pBuffer->owned_by_firmware) {
+	if ((reply->IOCStatus != MPI2_IOCSTATUS_SUCCESS) ||
+	    pBuffer->owned_by_firmware) {
 		status = MPS_DIAG_FAILURE;
 		mps_dprint(sc, MPS_FAULT, "%s: release of FW Diag Buffer "
 		    "failed with IOCStatus = 0x%x and IOCLogInfo = 0x%x\n",
-		    __func__, le16toh(reply->IOCStatus),
-		    le32toh(reply->IOCLogInfo));
+		    __func__, reply->IOCStatus, reply->IOCLogInfo);
 		goto done;
 	}
 

@@ -117,8 +117,6 @@ struct cam_ed {
 	STAILQ_ENTRY(cam_ed) highpowerq_entry;
 	struct mtx	 device_mtx;
 	struct task	 device_destroy_task;
-	const struct	 nvme_controller_data *nvme_cdata;
-	const struct	 nvme_namespace_data *nvme_data;
 };
 
 /*
@@ -169,7 +167,6 @@ struct cam_path {
 
 struct xpt_xport *	scsi_get_xport(void);
 struct xpt_xport *	ata_get_xport(void);
-struct xpt_xport *	nvme_get_xport(void);
 
 struct cam_ed *		xpt_alloc_device(struct cam_eb *bus,
 					 struct cam_et *target,

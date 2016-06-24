@@ -102,9 +102,6 @@ env_setup() {
 	NODOC=
 	NOPORTS=
 
-	# Set to non-empty value to disable distributing source tree.
-	NOSRC=
-
 	# Set to non-empty value to build dvd1.iso as part of the release.
 	WITH_DVD=
 	WITH_COMPRESSED_IMAGES=
@@ -163,18 +160,15 @@ env_check() {
 		NODOC=yes
 	fi
 
-	# If NOSRC, NOPORTS and/or NODOC are unset, they must not pass to make
-	# as variables.  The release makefile verifies definedness of the
+	# If NOPORTS and/or NODOC are unset, they must not pass to make as
+	# variables.  The release makefile verifies definedness of the
 	# NOPORTS/NODOC variables instead of their values.
-	SRCDOCPORTS=
+	DOCPORTS=
 	if [ -n "${NOPORTS}" ]; then
-		SRCDOCPORTS="NOPORTS=yes"
+		DOCPORTS="NOPORTS=yes "
 	fi
 	if [ -n "${NODOC}" ]; then
-		SRCDOCPORTS="${SRCDOCPORTS}${SRCDOCPORTS:+ }NODOC=yes"
-	fi
-	if [ -n "${NOSRC}" ]; then
-		SRCDOCPORTS="${SRCDOCPORTS}${SRCDOCPORTS:+ }NOSRC=yes"
+		DOCPORTS="${DOCPORTS}NODOC=yes"
 	fi
 
 	# The aggregated build-time flags based upon variables defined within
@@ -212,7 +206,7 @@ env_check() {
 	RELEASE_KMAKEFLAGS="${MAKE_FLAGS} ${KERNEL_FLAGS} \
 		KERNCONF=\"${KERNEL}\" ${ARCH_FLAGS} ${CONF_FILES}"
 	RELEASE_RMAKEFLAGS="${ARCH_FLAGS} \
-		KERNCONF=\"${KERNEL}\" ${CONF_FILES} ${SRCDOCPORTS} \
+		KERNCONF=\"${KERNEL}\" ${CONF_FILES} ${DOCPORTS} \
 		WITH_DVD=${WITH_DVD} WITH_VMIMAGES=${WITH_VMIMAGES} \
 		WITH_CLOUDWARE=${WITH_CLOUDWARE} XZ_THREADS=${XZ_THREADS}"
 

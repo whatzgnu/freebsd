@@ -53,7 +53,7 @@ laugardagur
 %H:%M:%S
 #
 # x_fmt
-%d.%m.%Y
+%e.%m.%Y
 #
 # c_fmt
 %e. %B %Y kl. %H:%M:%S
@@ -80,7 +80,7 @@ nóvember
 desember
 #
 # md_order
-dm
+m
 #
 # ampm_fmt
 %I:%M:%S %p

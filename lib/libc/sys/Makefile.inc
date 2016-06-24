@@ -28,8 +28,6 @@ SRCS+= futimens.c utimensat.c
 NOASM+= futimens.o utimensat.o
 PSEUDO+= _futimens.o _utimensat.o
 
-SRCS+= pipe.c
-
 INTERPOSED = \
 	accept \
 	accept4 \

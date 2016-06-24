@@ -58,10 +58,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/cpu.h>
 #include <machine/intr.h>
 
-#ifdef FDT
-#include <dev/ofw/ofw_bus_subr.h>
-#endif
-
 #include "pic_if.h"
 
 #include "gic_v3_reg.h"

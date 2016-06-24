@@ -87,10 +87,6 @@ BIN1+= apmd.conf
 BIN1+=	auto_master
 .endif
 
-.if ${MK_BLACKLIST} != "no"
-BIN1+= blacklistd.conf
-.endif
-
 .if ${MK_FREEBSD_UPDATE} != "no"
 BIN1+= freebsd-update.conf
 .endif

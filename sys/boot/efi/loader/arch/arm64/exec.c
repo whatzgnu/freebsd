@@ -113,12 +113,9 @@ elf64_exec(struct preloaded_file *fp)
 	ehdr = (Elf_Ehdr *)&(md->md_data);
 	entry = efi_translate(ehdr->e_entry);
 
-	efi_time_fini();
 	err = bi_load(fp->f_args, &modulep, &kernendp);
-	if (err != 0) {
-		efi_time_init();
+	if (err != 0)
 		return (err);
-	}
 
 	dev_cleanup();
 

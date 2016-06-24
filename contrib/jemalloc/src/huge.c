@@ -262,19 +262,19 @@ huge_ralloc_no_move_expand(tsdn_t *tsdn, void *ptr, size_t oldsize,
 	malloc_mutex_unlock(tsdn, &arena->huge_mtx);
 
 	/*
-	 * Use is_zeroed_chunk to detect whether the trailing memory is zeroed,
-	 * update extent's zeroed field, and zero as necessary.
+	 * Copy zero into is_zeroed_chunk and pass the copy to chunk_alloc(), so
+	 * that it is possible to make correct junk/zero fill decisions below.
 	 */
-	is_zeroed_chunk = false;
+	is_zeroed_chunk = zero;
+
 	if (arena_chunk_ralloc_huge_expand(tsdn, arena, ptr, oldsize, usize,
 	     &is_zeroed_chunk))
 		return (true);
 
 	malloc_mutex_lock(tsdn, &arena->huge_mtx);
+	/* Update the size of the huge allocation. */
 	huge_node_unset(ptr, node);
 	extent_node_size_set(node, usize);
-	extent_node_zeroed_set(node, extent_node_zeroed_get(node) &&
-	    is_zeroed_chunk);
 	huge_node_reset(tsdn, ptr, node);
 	malloc_mutex_unlock(tsdn, &arena->huge_mtx);
 

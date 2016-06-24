@@ -51,7 +51,6 @@ PORTBRANCH="ports/head@rHEAD"
 ## Set miscellaneous 'make release' settings.
 #NODOC=
 #NOPORTS=
-#NOSRC=
 #WITH_DVD=
 #WITH_COMPRESSED_IMAGES=
 

@@ -596,10 +596,8 @@ bhndb_generic_init_full_config(device_t dev, device_t child,
 	hostb = NULL;
 
 	/* Fetch the full set of bhnd-attached cores */
-	if ((error = device_get_children(sc->bus_dev, &devs, &ndevs))) {
-		device_printf(sc->dev, "unable to get children\n");
+	if ((error = device_get_children(sc->bus_dev, &devs, &ndevs)))
 		return (error);
-	}
 
 	/* Find our host bridge device */
 	hostb = BHNDB_FIND_HOSTB_DEVICE(dev, child);

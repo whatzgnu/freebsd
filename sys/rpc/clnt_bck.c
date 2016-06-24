@@ -175,9 +175,14 @@ clnt_bck_create(
 	return (cl);
 
 err:
-	mtx_destroy(&ct->ct_lock);
-	mem_free(ct, sizeof (struct ct_data));
-	mem_free(cl, sizeof (CLIENT));
+	if (cl) {
+		if (ct) {
+			mtx_destroy(&ct->ct_lock);
+			mem_free(ct, sizeof (struct ct_data));
+		}
+		if (cl)
+			mem_free(cl, sizeof (CLIENT));
+	}
 	return (NULL);
 }
 

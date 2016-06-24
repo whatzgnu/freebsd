@@ -586,9 +586,6 @@ rtwn_free_rx_list(struct rtwn_softc *sc)
 
 	if (rx_ring->desc_dmat != NULL) {
 		if (rx_ring->desc != NULL) {
-			bus_dmamap_sync(rx_ring->desc_dmat,
-			    rx_ring->desc_map,
-			    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(rx_ring->desc_dmat,
 			    rx_ring->desc_map);
 			bus_dmamem_free(rx_ring->desc_dmat, rx_ring->desc,
@@ -603,8 +600,6 @@ rtwn_free_rx_list(struct rtwn_softc *sc)
 		rx_data = &rx_ring->rx_data[i];
 
 		if (rx_data->m != NULL) {
-			bus_dmamap_sync(rx_ring->data_dmat,
-			    rx_data->map, BUS_DMASYNC_POSTREAD);
 			bus_dmamap_unload(rx_ring->data_dmat, rx_data->map);
 			m_freem(rx_data->m);
 			rx_data->m = NULL;
@@ -648,8 +643,6 @@ rtwn_alloc_tx_list(struct rtwn_softc *sc, int qid)
 		device_printf(sc->sc_dev, "could not load desc DMA map\n");
 		goto fail;
 	}
-	bus_dmamap_sync(tx_ring->desc_dmat, tx_ring->desc_map,
-	    BUS_DMASYNC_PREWRITE);
 
 	error = bus_dma_tag_create(bus_get_dma_tag(sc->sc_dev), 1, 0,
 	    BUS_SPACE_MAXADDR_32BIT, BUS_SPACE_MAXADDR, NULL, NULL, MCLBYTES,
@@ -698,8 +691,6 @@ rtwn_reset_tx_list(struct rtwn_softc *sc, int qid)
 		    sizeof(desc->nextdescaddr)));
 
 		if (tx_data->m != NULL) {
-			bus_dmamap_sync(tx_ring->data_dmat, tx_data->map,
-			    BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(tx_ring->data_dmat, tx_data->map);
 			m_freem(tx_data->m);
 			tx_data->m = NULL;
@@ -727,8 +718,6 @@ rtwn_free_tx_list(struct rtwn_softc *sc, int qid)
 
 	if (tx_ring->desc_dmat != NULL) {
 		if (tx_ring->desc != NULL) {
-			bus_dmamap_sync(tx_ring->desc_dmat,
-			    tx_ring->desc_map, BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(tx_ring->desc_dmat,
 			    tx_ring->desc_map);
 			bus_dmamem_free(tx_ring->desc_dmat, tx_ring->desc,
@@ -741,8 +730,6 @@ rtwn_free_tx_list(struct rtwn_softc *sc, int qid)
 		tx_data = &tx_ring->tx_data[i];
 
 		if (tx_data->m != NULL) {
-			bus_dmamap_sync(tx_ring->data_dmat, tx_data->map,
-			    BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(tx_ring->data_dmat, tx_data->map);
 			m_freem(tx_data->m);
 			tx_data->m = NULL;
@@ -1774,10 +1761,7 @@ rtwn_tx_done(struct rtwn_softc *sc, int qid)
 		if (le32toh(tx_desc->txdw0) & R92C_TXDW0_OWN)
 			continue;
 
-		/* Unmap and free mbuf. */
-		bus_dmamap_sync(tx_ring->data_dmat, tx_data->map,
-		    BUS_DMASYNC_POSTWRITE);
-		bus_dmamap_unload(tx_ring->data_dmat, tx_data->map);
+		bus_dmamap_unload(tx_ring->desc_dmat, tx_ring->desc_map);
 
 		/*
 		 * XXX TODO: figure out whether the transmit succeeded or not.
@@ -1787,10 +1771,8 @@ rtwn_tx_done(struct rtwn_softc *sc, int qid)
 		tx_data->ni = NULL;
 		tx_data->m = NULL;
 
-		if (--tx_ring->queued)
-			sc->sc_tx_timer = 5;
-		else
-			sc->sc_tx_timer = 0;
+		sc->sc_tx_timer = 0;
+		tx_ring->queued--;
 	}
 
 	if (tx_ring->queued < (RTWN_TX_LIST_COUNT - 1))

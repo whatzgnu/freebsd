@@ -93,6 +93,7 @@
 #include "uthash.h"
 #include "ucl.h"
 #include "ucl_hash.h"
+#include "xxhash.h"
 
 #ifdef HAVE_OPENSSL
 #include <openssl/evp.h>

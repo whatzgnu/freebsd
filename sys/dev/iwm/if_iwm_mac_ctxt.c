@@ -275,7 +275,7 @@ iwm_mvm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
 	 */
 	cmd->tsf_id = htole32(IWM_DEFAULT_TSFID);
 
-	IEEE80211_ADDR_COPY(cmd->node_addr, vap->iv_myaddr);
+	IEEE80211_ADDR_COPY(cmd->node_addr, ic->ic_macaddr);
 
 	/*
 	 * XXX should we error out if in_assoc is 1 and ni == NULL?

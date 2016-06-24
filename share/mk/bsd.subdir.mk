@@ -159,9 +159,9 @@ ${__target}_subdir_${DIRPRFX}${__dir}: .PHONY .MAKE .SILENT ${__deps}
 	    ${_SUBDIR_SH};
 .endif
 .endfor	# __dir in ${SUBDIR}
-${__target}: ${__subdir_targets} .PHONY
+${__target}: ${__subdir_targets}
 .else
-${__target}: _SUBDIR .PHONY
+${__target}: _SUBDIR
 .endif	# SUBDIR_PARALLEL || _is_standalone_target
 .endif	# make(${__target})
 .endfor	# __target in ${SUBDIR_TARGETS}

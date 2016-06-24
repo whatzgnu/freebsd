@@ -4,7 +4,18 @@
 # -----------------------------------------------------------------------------
 #
 # Short month names
-jan
+jah
+feb
+mar
+apr
+maj
+juh
+jul
+abg
+cep
+okt
+hob
+dec""jan
 feb
 mar
 apr
@@ -18,7 +29,18 @@ nov
 dec
 #
 # Long month names (as in a date)
-januar
+jahuar
+februar
+mart
+aprjl
+maj
+juh
+jul
+abguct
+ceptembar
+oktobar
+hobembar
+decembar""januar
 februar
 mart
 april
@@ -32,7 +54,13 @@ novembar
 decembar
 #
 # Short weekday names
-ned
+hed
+poh
+uto
+cre
+èet
+pet
+cub""ned
 pon
 uto
 sre
@@ -41,7 +69,13 @@ pet
 sub
 #
 # Long weekday names
-nedelja
+hedelja
+pohedeljak
+utorak
+creda
+èetbrtak
+petak
+cubota""nedelja
 ponedeljak
 utorak
 sreda
@@ -50,23 +84,35 @@ petak
 subota
 #
 # X_fmt
-%H.%M.%S
+%H.%M.%S""%H.%M.%S
 #
 # x_fmt
-%d.%m.%y.
+%e.%m.%y.""%e.%m.%y.
 #
 # c_fmt
-%d. %B %Y. %H.%M.%S
+%d. %B %Y. %H.%M.%S""%d. %B %Y. %H.%M.%S %Z
 #
 # AM/PM
-pre podne
+pre podhe
+po podhe""pre podne
 po podne
 #
 # date_fmt
-%d. %B %Y. %H.%M.%S %Z
+%d. %B %Y. %H.%M.%S %Z""%d. %B %Y. %H.%M.%S %Z
 #
 # Long month names (without case ending)
-januar
+jahuar
+februar
+mart
+aprjl
+maj
+juh
+jul
+abguct
+ceptembar
+oktobar
+hobembar
+decembar""januar
 februar
 mart
 april
@@ -80,8 +126,8 @@ novembar
 decembar
 #
 # md_order
-dm
+mm
 #
 # ampm_fmt
-%I.%M.%S %p
+%I.%M.%S %p""%I.%M.%S %p
 # EOF
