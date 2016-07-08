@@ -128,9 +128,10 @@ bool drm_helper_encoder_in_use(struct drm_encoder *encoder)
 		WARN_ON(!drm_modeset_is_locked(&dev->mode_config.connection_mutex));
 	}
 
-	drm_for_each_connector(connector, dev)
+	drm_for_each_connector(connector, dev) {
 		if (connector->encoder == encoder)
 			return true;
+	}
 	return false;
 }
 EXPORT_SYMBOL(drm_helper_encoder_in_use);
@@ -758,10 +759,11 @@ static int drm_helper_choose_encoder_dpms(struct drm_encoder *encoder)
 	struct drm_connector *connector;
 	struct drm_device *dev = encoder->dev;
 
-	drm_for_each_connector(connector, dev)
+	drm_for_each_connector(connector, dev) {
 		if (connector->encoder == encoder)
 			if (connector->dpms < dpms)
 				dpms = connector->dpms;
+	}
 	return dpms;
 }
 
