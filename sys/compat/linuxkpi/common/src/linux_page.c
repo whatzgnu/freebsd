@@ -88,20 +88,9 @@ wbinvd_on_all_cpus(void)
 static int
 needs_set_memattr(vm_page_t m, vm_memattr_t attr)
 {
-	vm_memattr_t mode;
-
-	mode = m->md.pat_mode;
-
-	if ((mode == 0) && !(m->flags & PG_FICTITIOUS) &&
-	    (attr == VM_MEMATTR_DEFAULT))
-		return (0);
-
-	if (mode != attr)
-		return (1);
-	return (0);
+	return (m->md.pat_mode != attr);
 }
 #endif
-
 
 int
 vm_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr, unsigned long pfn, pgprot_t pgprot)
@@ -110,26 +99,22 @@ vm_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr, unsigned long
 	vm_page_t page;
 	pmap_t pmap = vma->vm_cached_map->pmap;
 	vm_memattr_t attr = pgprot2cachemode(pgprot);
-
-	if (__predict_false(linux_skip_prefault) && (vma->vm_pfn_count > 0))
-		return (-EBUSY);
+	vm_offset_t off;
 
 	vm_obj = vma->vm_obj;
 	page = PHYS_TO_VM_PAGE((pfn << PAGE_SHIFT));
+	off = OFF_TO_IDX(addr - vma->vm_start);
 
+	MPASS(off <= OFF_TO_IDX(vma->vm_end));
 #if defined(__i386__) || defined(__amd64__)
-	if (needs_set_memattr(page, attr)) {
-		page->flags |= PG_FICTITIOUS;
+	if (needs_set_memattr(page, attr))
 		pmap_page_set_memattr(page, attr);
-	}
 #endif
-
-	MPASS(vma->vm_flags & VM_PFNINTERNAL);
-	if ((vma->vm_flags & VM_PFNINTERNAL) && (vma->vm_pfn_count == 0)) {
-		vm_page_tryxbusy(page);
-		vma->vm_pfn_array[vma->vm_pfn_count++] = pfn;
-	} else
-		pmap_enter_quick(pmap, addr, page, pgprot & VM_PROT_ALL);
+	if ((page->flags & PG_FICTITIOUS) && ((page->oflags & VPO_UNMANAGED) == 0))
+		page->oflags |= VPO_UNMANAGED;
+	page->valid = VM_PAGE_BITS_ALL;
+	pmap_enter(pmap, addr, page, pgprot & VM_PROT_ALL, (pgprot & VM_PROT_ALL) | PMAP_ENTER_NOSLEEP, 0);
+	(*vma->vm_pfn_pcount)++;
 	return (0);
 }
 
@@ -531,7 +516,7 @@ alloc_page(gfp_t flags)
 	tries = 0;
 retry:
 	page = vm_page_alloc_contig(NULL, 0, req, 1, 0, 0xffffffff,
-	    PAGE_SIZE, 0, VM_MEMATTR_UNCACHEABLE);
+	    PAGE_SIZE, 0, VM_MEMATTR_DEFAULT);
 	if (page == NULL) {
 		if (tries < 1) {
 			if (!vm_page_reclaim_contig(req, 1, 0, 0xffffffff,

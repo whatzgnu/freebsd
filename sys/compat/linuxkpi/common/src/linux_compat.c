@@ -99,6 +99,10 @@ int linux_db_trace;
 SYSCTL_INT(_compat_linuxkpi, OID_AUTO, db_trace, CTLFLAG_RWTUN, &linux_db_trace, 0, "enable backtrace instrumentation");
 int linux_skip_prefault;
 SYSCTL_INT(_compat_linuxkpi, OID_AUTO, dev_fault_skip_prefault, CTLFLAG_RWTUN, &linux_skip_prefault, 0, "disable faultahead");
+static int cdev_nopfn_count;
+SYSCTL_INT(_compat_linuxkpi, OID_AUTO, cdev_nopfn_count, CTLFLAG_RW, &cdev_nopfn_count, 0, "cdev nopfn");
+static int cdev_pfn_found_count;
+SYSCTL_INT(_compat_linuxkpi, OID_AUTO, cdev_pfn_found_count, CTLFLAG_RW, &cdev_pfn_found_count, 0, "cdev found pfn");
 
 MALLOC_DEFINE(M_KMALLOC, "linux", "Linux kmalloc compat");
 MALLOC_DEFINE(M_LCINT, "linuxint", "Linux compat internal");
@@ -220,9 +224,9 @@ schedule_timeout(signed long timeout)
 	flags = (current->state == TASK_INTERRUPTIBLE) ? PCATCH : 0;
 	if (sleepable)
 		ret = _sleep(current, &(m->lock_object), flags | PDROP ,
-			     "lstimi", tick_sbt * timeout, 0 , C_HARDCLOCK);
+			     "lsti", tick_sbt * timeout, 0 , C_HARDCLOCK);
 	else 
-		ret = _msleep_spin_sbt(current, m, flags | PDROP, "lstimispin",
+		ret = _msleep_spin_sbt(current, m, flags | PDROP, "lstisp",
 				      tick_sbt * timeout, 0, C_HARDCLOCK);
 
 	set_current_state(TASK_RUNNING);
@@ -583,34 +587,34 @@ vm_map_find_object_entry(vm_map_t map, vm_object_t obj)
 	return (NULL);
 }
 
-static inline vm_offset_t
-vm_area_get_object_start(vm_map_t map, vm_object_t obj, struct vm_area_struct *vmap)
+static inline void
+vm_area_set_object_bounds(vm_map_t map, vm_object_t obj, struct vm_area_struct *vmap)
 {
 	vm_map_entry_t entry;
+	int needunlock = 0;
 	
 	if (__predict_true(vmap->vm_cached_map == map))
-		return (vmap->vm_cached_start);
-
-	vm_map_lock(map);
+		return;
+	if (!sx_xlocked(&map->lock)) {
+		vm_map_lock_read(map);
+		needunlock = 1;
+	}
 	entry = vm_map_find_object_entry(map, obj);
-	vm_map_unlock(map);
+	if (needunlock)
+		vm_map_unlock_read(map);
 
 	MPASS(entry != NULL);
 	vmap->vm_cached_map = map;
-	vmap->vm_cached_start = entry->start;
-
-	return (entry->start);
+	vmap->vm_start = entry->start & ~(PAGE_SIZE-1);
+	vmap->vm_end = entry->end & ~(PAGE_SIZE-1);
 }
 
 static int
 linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_page_t *mres)
 {
-	vm_page_t page;
 	struct vm_fault vmf;
 	struct vm_area_struct *vmap, cvma;
-	int rc, err, fault_flags;
-	vm_object_t page_object;
-	unsigned long vma_flags;
+	int rc, err;
 	vm_map_t map;
 
 	linux_set_current();
@@ -626,73 +630,31 @@ linux_cdev_pager_fault(vm_object_t vm_obj, vm_ooffset_t offset, int prot, vm_pag
 		vm_page_unlock(*mres);
 	}
 
-	/*
-	 * We minimize object lock acquisition by tracking the pfn
-	 * inside of the vma that we pass in.
-	 */
-
 	trace_compat_cdev_pager_fault(vm_obj, offset, prot, mres);
 	vm_object_pip_add(vm_obj, 1);
 	VM_OBJECT_WUNLOCK(vm_obj);
-retry:
-	vma_flags = VM_PFNINTERNAL;
-	fault_flags = (prot & VM_PROT_WRITE) ? FAULT_FLAG_WRITE : 0;
-
 	map = &curproc->p_vmspace->vm_map;
-	vmap->vm_start = vm_area_get_object_start(map, vm_obj, vmap);
-
+	vm_area_set_object_bounds(map, vm_obj, vmap);
+retry:
 	memcpy(&cvma, vmap, sizeof(cvma));
-	cvma.vm_pfn_count = 0;
-	cvma.vm_flags |= vma_flags;
 	vmf.virtual_address = (void *)(vmap->vm_start + offset);
-	vmf.flags = FAULT_FLAG_ALLOW_RETRY|FAULT_FLAG_RETRY_NOWAIT | fault_flags;
+	vmf.flags = (prot & VM_PROT_WRITE) ? FAULT_FLAG_WRITE : 0;
+	cvma.vm_pfn_count = 0;
+	cvma.vm_pfn_pcount = &cvma.vm_pfn_count;
 	err = vmap->vm_ops->fault(&cvma, &vmf);
-	if (__predict_false(err == VM_FAULT_RETRY)) {
-		MPASS(cvma.vm_pfn_count == 0);
-		vmf.flags = FAULT_FLAG_ALLOW_RETRY;
-		err = vmap->vm_ops->fault(&cvma, &vmf);
-	}
-	if (__predict_false(err == VM_FAULT_RETRY)) {
-		MPASS(cvma.vm_pfn_count == 0);
-		kern_yield(0);
-		vmf.flags = 0;
-		err = vmap->vm_ops->fault(&cvma, &vmf);
-	}
-	if (err != VM_FAULT_NOPAGE)
-		goto err;
-
-
-	/*
-	 * By contract vm_insert_pfn will wait until it can busy the first
-	 * page. So if we get here without at least one valid pfn there may
-	 * be a bug - or maybe we lost a race.
-	 */
 	if (cvma.vm_pfn_count == 0) {
-		VM_OBJECT_WLOCK(vm_obj);
-		page = vm_page_lookup(vm_obj, OFF_TO_IDX(offset));
-		if (page != NULL)
-			goto done;
-		VM_OBJECT_WUNLOCK(vm_obj);
 		kern_yield(0);
 		goto retry;
 	}
-	/*
-	 * A device page can be mapped by multiple objects and this
-	 * page is currently in another object
-	 */
-	page = PFN_TO_VM_PAGE(cvma.vm_pfn_array[0]);
-	if (page->object != NULL && page->object != vm_obj) {
-		page_object = page->object;
-		VM_OBJECT_WLOCK(page_object);
-		vm_page_lock(page);
-		vm_page_remove(page);
-		vm_page_unlock(page);
-		VM_OBJECT_WUNLOCK(page_object);
-	}
 
 	VM_OBJECT_WLOCK(vm_obj);
-	page = PFN_TO_VM_PAGE(cvma.vm_pfn_array[0]);
-done:
+	if (__predict_false(err != VM_FAULT_NOPAGE))
+		goto err;
+	vm_object_pip_wakeup(vm_obj);
+	VM_OBJECT_WUNLOCK(vm_obj);
+
+	atomic_add_int(&cdev_pfn_found_count, 1);
+
 	/*
 	 * The VM has helpfully given us pages, but device memory
 	 * is not fungible. Thus we need to remove them from the object
@@ -700,40 +662,11 @@ done:
 	 * actually use. We don't free them unless we succeed, so that 
 	 * there is still a valid result page on failure.
 	 */
-	if (mres && *mres != page) {
-		vm_page_lock(*mres);
-		vm_page_free(*mres);
-		vm_page_unlock(*mres);
-		*mres = page;
-	}
-	MPASS(page->object == NULL || page->object == vm_obj);
-	if (page->object == NULL || 
-	    (page->object == vm_obj && page->pindex != OFF_TO_IDX(offset))) {
-
-		/* Check if the page needs to be moved - there may be a cheaper way*/
-		if (page->object != NULL) {
-			vm_page_lock(page);
-			vm_page_remove(page);
-			vm_page_unlock(page);
-		}
-
-		while (page->object == NULL && vm_page_insert(page, vm_obj, OFF_TO_IDX(offset))) {
-			VM_OBJECT_WUNLOCK(vm_obj);
-			VM_WAIT;
-			VM_OBJECT_WLOCK(vm_obj);
-		}
-		page->valid = VM_PAGE_BITS_ALL;
-	}
-	if (!vm_page_xbusied(page))
-		while (vm_page_tryxbusy(page) == 0) {
-			vm_page_lock(page);
-			vm_page_busy_sleep(page, "linuxvipp");
-		}
-
-	vm_object_pip_wakeup(vm_obj);
-	return (VM_PAGER_OK);
+	vm_page_lock(*mres);
+	vm_page_free(*mres);
+	vm_page_unlock(*mres);
+	return (VM_PAGER_NOPAGE);
 err:
-	VM_OBJECT_WLOCK(vm_obj);
 	switch (err) {
 	case VM_FAULT_OOM:
 		rc = VM_PAGER_AGAIN;
@@ -1077,6 +1010,7 @@ linux_dev_mmap_single(struct cdev *dev, vm_ooffset_t *offset,
 	vma.vm_pfn = 0;
 	vma.vm_flags = vma.vm_page_prot = nprot;
 	vma.vm_ops = NULL;
+	vma.vm_file = filp;
 	if (filp->f_op->mmap) {
 		error = -filp->f_op->mmap(filp, &vma);
 		if (error == 0) {
@@ -1088,18 +1022,13 @@ linux_dev_mmap_single(struct cdev *dev, vm_ooffset_t *offset,
 				MPASS(vma.vm_ops->close != NULL);
 				vmap = malloc(sizeof(*vmap), M_LCINT, M_WAITOK);
 				memcpy(vmap, &vma, sizeof(*vmap));
-				/*
-				 * VM_MIXEDMAP can only end up calling in to
-				 *  unimplemented functions on FreeBSD
-				 */
-				if (vma.vm_flags & VM_MIXEDMAP) {
-					vma.vm_flags &= ~VM_MIXEDMAP;
-					vma.vm_flags |= VM_PFNMAP;
-				}
-				/* XXX note to self - audit vm_page_prot usage */
 				*object = cdev_pager_allocate(vmap, OBJT_MGTDEVICE, &linux_cdev_pager_ops,
 							      size, nprot,
 							      0, curthread->td_ucred);
+
+				VM_OBJECT_WLOCK(*object);
+				(*object)->flags2 |= OBJ2_GRAPHICS;
+				VM_OBJECT_WUNLOCK(*object);
 				if (*object != NULL)
 					vmap->vm_obj = *object;
 			} else {
@@ -1652,13 +1581,14 @@ list_sort(void *priv, struct list_head *head, int (*cmp)(void *priv,
 	free(ar, M_KMALLOC);
 }
 
-void
+int
 linux_irq_handler(void *ent)
 {
 	struct irq_ent *irqe;
 
 	irqe = ent;
 	irqe->handler(irqe->irq, irqe->arg);
+	return (FILTER_HANDLED);
 }
 
 int

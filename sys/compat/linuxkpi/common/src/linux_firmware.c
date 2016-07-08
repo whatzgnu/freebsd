@@ -20,15 +20,19 @@ request_firmware(const struct linux_firmware **lkfwp, const char *name,
 	const struct firmware *fw;
 	char *mapped_name, *pindex;
 	linker_file_t result;
-	int rc;
+	int rc, retries;
 
 	*lkfwp = NULL;
 	mapped_name = NULL;
 	if ((lkfw = malloc(sizeof(*lkfw), M_LKPI_FW, M_NOWAIT)) == NULL)
 		return (-ENOMEM);
 
-
+	retries = 0;
 	fw = firmware_get(name);
+	if (fw == NULL) {
+		pause("fwwait", hz/2);
+		fw = firmware_get(name);
+	}
 	if (fw == NULL && ((index(name, '/') != NULL) || (index(name, '.') != NULL))) {
 		mapped_name = strdup(name, M_LKPI_FW);
 		if (mapped_name == NULL) {
@@ -44,7 +48,15 @@ request_firmware(const struct linux_firmware **lkfwp, const char *name,
 			rc = -ENOENT;
 			goto fail;
 		}
+	retry:
+		pause("fwwait", hz/4);
 		fw = firmware_get(name);
+		if (fw == NULL) {
+			firmware_get(mapped_name);
+			if (retries++ < 10)
+				goto retry;
+		}
+
 #ifdef __notyet__
 		/* XXX leave dangling ref */
 		linker_file_unload(result,  0);
