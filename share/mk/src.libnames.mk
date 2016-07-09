@@ -158,6 +158,7 @@ _LIBRARIES=	\
 		sysdecode \
 		tacplus \
 		termcap \
+		tls \
 		termcapw \
 		ufs \
 		ugidfw \
@@ -207,6 +208,7 @@ _DP_archive+=	md
 .endif
 _DP_sqlite3=	pthread
 _DP_ssl=	crypto
+_DP_tls=	crypto ssl
 _DP_ssh=	crypto crypt z
 .if ${MK_LDNS} != "no"
 _DP_ssh+=	ldns
@@ -525,6 +527,7 @@ LIBPANELWDIR=	${OBJTOP}/lib/ncurses/panelw
 LIBCRYPTODIR=	${OBJTOP}/secure/lib/libcrypto
 LIBSSHDIR=	${OBJTOP}/secure/lib/libssh
 LIBSSLDIR=	${OBJTOP}/secure/lib/libssl
+LIBTLSDIR=	${OBJTOP}/secure/lib/libtls
 LIBTEKENDIR=	${OBJTOP}/sys/teken/libteken
 LIBEGACYDIR=	${OBJTOP}/tools/build
 LIBLNDIR=	${OBJTOP}/usr.bin/lex/lib
