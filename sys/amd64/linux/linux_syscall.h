@@ -277,7 +277,7 @@
 #define	LINUX_SYS_linux_utimensat	280
 #define	LINUX_SYS_linux_epoll_pwait	281
 #define	LINUX_SYS_linux_signalfd	282
-#define	LINUX_SYS_linux_timerfd_create	283
+#define	LINUX_SYS_linux_timerfd	283
 #define	LINUX_SYS_linux_eventfd	284
 #define	LINUX_SYS_linux_fallocate	285
 #define	LINUX_SYS_linux_timerfd_settime	286
@@ -303,9 +303,8 @@
 #define	LINUX_SYS_linux_syncfs	306
 #define	LINUX_SYS_linux_sendmmsg	307
 #define	LINUX_SYS_linux_setns	308
-#define	LINUX_SYS_linux_getcpu	309
-#define	LINUX_SYS_linux_process_vm_readv	310
-#define	LINUX_SYS_linux_process_vm_writev	311
-#define	LINUX_SYS_linux_kcmp	312
-#define	LINUX_SYS_linux_finit_module	313
-#define	LINUX_SYS_MAXSYSCALL	315
+#define	LINUX_SYS_linux_process_vm_readv	309
+#define	LINUX_SYS_linux_process_vm_writev	310
+#define	LINUX_SYS_linux_kcmp	311
+#define	LINUX_SYS_linux_finit_module	312
+#define	LINUX_SYS_MAXSYSCALL	314

@@ -28,7 +28,6 @@
 #include <sys/bus.h>
 
 #include <dev/bhnd/bhnd.h>
-#include <dev/bhnd/nvram/bhnd_nvram.h>
 
 INTERFACE bhnd_chipc;
 
@@ -79,7 +78,7 @@ METHOD struct chipc_caps * get_caps {
 } DEFAULT bhnd_chipc_null_get_caps;
 
 /**
- * Enable hardware access to the SPROM.
+ * Enable hardware access to the SPROM/OTP source.
  * 
  * @param sc chipc driver state.
  *
@@ -92,7 +91,7 @@ METHOD int enable_sprom {
 }
 
 /**
- * Release hardware access to the SPROM.
+ * Release hardware access to the SPROM/OTP source.
  * 
  * @param sc chipc driver state.
  */

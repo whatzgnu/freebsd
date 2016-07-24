@@ -1000,7 +1000,7 @@ struct linux_epoll_pwait_args {
 struct linux_signalfd_args {
 	register_t dummy;
 };
-struct linux_timerfd_create_args {
+struct linux_timerfd_args {
 	register_t dummy;
 };
 struct linux_eventfd_args {
@@ -1096,9 +1096,6 @@ struct linux_sendmmsg_args {
 	char flags_l_[PADL_(l_uint)]; l_uint flags; char flags_r_[PADR_(l_uint)];
 };
 struct linux_setns_args {
-	register_t dummy;
-};
-struct linux_getcpu_args {
 	register_t dummy;
 };
 struct linux_process_vm_readv_args {
@@ -1342,7 +1339,7 @@ int	linux_move_pages(struct thread *, struct linux_move_pages_args *);
 int	linux_utimensat(struct thread *, struct linux_utimensat_args *);
 int	linux_epoll_pwait(struct thread *, struct linux_epoll_pwait_args *);
 int	linux_signalfd(struct thread *, struct linux_signalfd_args *);
-int	linux_timerfd_create(struct thread *, struct linux_timerfd_create_args *);
+int	linux_timerfd(struct thread *, struct linux_timerfd_args *);
 int	linux_eventfd(struct thread *, struct linux_eventfd_args *);
 int	linux_fallocate(struct thread *, struct linux_fallocate_args *);
 int	linux_timerfd_settime(struct thread *, struct linux_timerfd_settime_args *);
@@ -1368,7 +1365,6 @@ int	linux_clock_adjtime(struct thread *, struct linux_clock_adjtime_args *);
 int	linux_syncfs(struct thread *, struct linux_syncfs_args *);
 int	linux_sendmmsg(struct thread *, struct linux_sendmmsg_args *);
 int	linux_setns(struct thread *, struct linux_setns_args *);
-int	linux_getcpu(struct thread *, struct linux_getcpu_args *);
 int	linux_process_vm_readv(struct thread *, struct linux_process_vm_readv_args *);
 int	linux_process_vm_writev(struct thread *, struct linux_process_vm_writev_args *);
 int	linux_kcmp(struct thread *, struct linux_kcmp_args *);
@@ -1636,7 +1632,7 @@ int	linux_finit_module(struct thread *, struct linux_finit_module_args *);
 #define	LINUX_SYS_AUE_linux_utimensat	AUE_FUTIMESAT
 #define	LINUX_SYS_AUE_linux_epoll_pwait	AUE_NULL
 #define	LINUX_SYS_AUE_linux_signalfd	AUE_NULL
-#define	LINUX_SYS_AUE_linux_timerfd_create	AUE_NULL
+#define	LINUX_SYS_AUE_linux_timerfd	AUE_NULL
 #define	LINUX_SYS_AUE_linux_eventfd	AUE_NULL
 #define	LINUX_SYS_AUE_linux_fallocate	AUE_NULL
 #define	LINUX_SYS_AUE_linux_timerfd_settime	AUE_NULL
@@ -1662,7 +1658,6 @@ int	linux_finit_module(struct thread *, struct linux_finit_module_args *);
 #define	LINUX_SYS_AUE_linux_syncfs	AUE_SYNC
 #define	LINUX_SYS_AUE_linux_sendmmsg	AUE_NULL
 #define	LINUX_SYS_AUE_linux_setns	AUE_NULL
-#define	LINUX_SYS_AUE_linux_getcpu	AUE_NULL
 #define	LINUX_SYS_AUE_linux_process_vm_readv	AUE_NULL
 #define	LINUX_SYS_AUE_linux_process_vm_writev	AUE_NULL
 #define	LINUX_SYS_AUE_linux_kcmp	AUE_NULL

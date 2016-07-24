@@ -18,7 +18,6 @@ LOCALES+=	hi_IN.UTF-8
 LOCALES+=	hy_AM.UTF-8
 LOCALES+=	it_CH.UTF-8
 LOCALES+=	ru_RU.CP866
-LOCALES+=	sr_Latn_RS.UTF-8
 LOCALES+=	tr_TR.UTF-8
 LOCALES+=	uk_UA.ISO8859-5
 LOCALES+=	uk_UA.KOI8-U
@@ -203,9 +202,6 @@ SAME+=		fr_CH.ISO8859-15 fr_CH.ISO8859-1
 SAME+=		hi_IN.UTF-8 hi_IN.ISCII-DEV
 SAME+=		hy_AM.UTF-8 hy_AM.ARMSCII-8
 SAME+=		uk_UA.KOI8-U ru_RU.KOI8-R
-SAME+=		sr_Latn_RS.UTF-8 sr_Latn_RS.ISO8859-2
-SAME+=		sr_Latn_RS.UTF-8 sr_Cyrl_RS.UTF-8
-SAME+=		sr_Latn_RS.UTF-8 sr_Cyrl_RS.ISO8859-5
 SAME+=		ko_KR.eucKR ko_KR.CP949	# legacy (same charset)
 
 FILES=		${LOCALES:S/$/.out/}

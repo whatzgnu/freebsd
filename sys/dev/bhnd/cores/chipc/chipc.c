@@ -45,13 +45,13 @@ __FBSDID("$FreeBSD$");
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/bus.h>
+#include <sys/rman.h>
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/mutex.h>
 #include <sys/systm.h>
 
 #include <machine/bus.h>
-#include <sys/rman.h>
 #include <machine/resource.h>
 
 #include <dev/bhnd/bhnd.h>
@@ -68,17 +68,25 @@ static struct bhnd_device_quirk chipc_quirks[];
 
 /* Supported device identifiers */
 static const struct bhnd_device chipc_devices[] = {
-	BHND_DEVICE(CC,	NULL,	chipc_quirks),
+	BHND_DEVICE(BCM, CC, NULL, chipc_quirks),
 	BHND_DEVICE_END
 };
 
 
 /* Device quirks table */
 static struct bhnd_device_quirk chipc_quirks[] = {
-	/* core revision quirks */
+	/* HND OTP controller revisions */
+	BHND_CORE_QUIRK	(HWREV_EQ (12),		CHIPC_QUIRK_OTP_HND), /* (?) */
+	BHND_CORE_QUIRK	(HWREV_EQ (17),		CHIPC_QUIRK_OTP_HND), /* BCM4311 */
+	BHND_CORE_QUIRK	(HWREV_EQ (22),		CHIPC_QUIRK_OTP_HND), /* BCM4312 */
+
+	/* IPX OTP controller revisions */
+	BHND_CORE_QUIRK	(HWREV_EQ (21),		CHIPC_QUIRK_OTP_IPX),
+	BHND_CORE_QUIRK	(HWREV_GTE(23),		CHIPC_QUIRK_OTP_IPX),
+	
 	BHND_CORE_QUIRK	(HWREV_GTE(32),		CHIPC_QUIRK_SUPPORTS_SPROM),
 	BHND_CORE_QUIRK	(HWREV_GTE(35),		CHIPC_QUIRK_SUPPORTS_CAP_EXT),
-	BHND_CORE_QUIRK	(HWREV_GTE(49),		CHIPC_QUIRK_IPX_OTPLAYOUT_SIZE),
+	BHND_CORE_QUIRK	(HWREV_GTE(49),		CHIPC_QUIRK_IPX_OTPL_SIZE),
 
 	/* 4706 variant quirks */
 	BHND_CORE_QUIRK	(HWREV_EQ (38),		CHIPC_QUIRK_4706_NFLASH), /* BCM5357? */
@@ -104,10 +112,11 @@ static struct bhnd_device_quirk chipc_quirks[] = {
 
 static int			 chipc_add_children(struct chipc_softc *sc);
 
+static bhnd_nvram_src		 chipc_find_nvram_src(struct chipc_softc *sc,
+				     struct chipc_caps *caps);
 static int			 chipc_read_caps(struct chipc_softc *sc,
 				     struct chipc_caps *caps);
 
-static bhnd_nvram_src_t		 chipc_nvram_identify(struct chipc_softc *sc);
 static bool			 chipc_should_enable_sprom(
 				     struct chipc_softc *sc);
 
@@ -202,6 +211,8 @@ chipc_attach(device_t dev)
 	return (0);
 	
 failed:
+	device_delete_children(sc->dev);
+
 	if (sc->core_region != NULL) {
 		chipc_release_region(sc, sc->core_region,
 		    RF_ALLOCATED|RF_ACTIVE);
@@ -435,7 +446,7 @@ chipc_read_caps(struct chipc_softc *sc, struct chipc_caps *caps)
 	caps->aob		= CHIPC_GET_FLAG(cap_ext_reg, CHIPC_CAP2_AOB);
 
 	/* Fetch OTP size for later IPX controller revisions */
-	if (CHIPC_QUIRK(sc, IPX_OTPLAYOUT_SIZE)) {
+	if (CHIPC_QUIRK(sc, IPX_OTPL_SIZE)) {
 		regval = bhnd_bus_read_4(sc->core, CHIPC_OTPLAYOUT);
 		caps->otp_size = CHIPC_GET_BITS(regval, CHIPC_OTPL_SIZE);
 	}
@@ -477,47 +488,26 @@ chipc_read_caps(struct chipc_softc *sc, struct chipc_caps *caps)
 		caps->flash_type = CHIPC_NFLASH_4706;
 	}
 
-	return (0);
-}
 
-/**
- * Determine the NVRAM data source for this device.
- *
- * @param sc chipc driver state.
- */
-static bhnd_nvram_src_t
-chipc_nvram_identify(struct chipc_softc *sc)
-{
-	uint32_t		 srom_ctrl;
+	/* Determine NVRAM source. Must occur after the SPROM/OTP/flash
+	 * capability flags have been populated. */
+	caps->nvram_src = chipc_find_nvram_src(sc, caps);
 
-	/* Very early devices vend SPROM/OTP/CIS (if at all) via the
-	 * host bridge interface instead of ChipCommon. */
-	if (!CHIPC_QUIRK(sc, SUPPORTS_SPROM))
-		return (BHND_NVRAM_SRC_UNKNOWN);
+	/* Determine the SPROM offset within OTP (if any). SPROM-formatted
+	 * data is placed within the OTP general use region. */
+	caps->sprom_offset = 0;
+	if (caps->nvram_src == BHND_NVRAM_SRC_OTP) {
+		CHIPC_ASSERT_QUIRK(sc, OTP_IPX);
 
-	/*
-	 * Later chipset revisions standardized the SPROM capability flags and
-	 * register interfaces.
-	 * 
-	 * We check for hardware presence in order of precedence. For example,
-	 * SPROM is is always used in preference to internal OTP if found.
-	 */
-	if (CHIPC_CAP(sc, sprom)) {
-		srom_ctrl = bhnd_bus_read_4(sc->core, CHIPC_SPROM_CTRL);
-		if (srom_ctrl & CHIPC_SRC_PRESENT)
-			return (BHND_NVRAM_SRC_SPROM);
+		/* Bit offset to GUP HW subregion containing SPROM data */
+		regval = bhnd_bus_read_4(sc->core, CHIPC_OTPLAYOUT);
+		caps->sprom_offset = CHIPC_GET_BITS(regval, CHIPC_OTPL_GUP);
+
+		/* Convert to bytes */
+		caps->sprom_offset /= 8;
 	}
 
-	/* Check for OTP */
-	if (CHIPC_CAP(sc, otp_size) != 0)
-		return (BHND_NVRAM_SRC_OTP);
-
-	/* Check for flash */
-	if (CHIPC_CAP(sc, flash_type) != CHIPC_FLASH_NONE)
-		return (BHND_NVRAM_SRC_FLASH);
-
-	/* No NVRAM hardware capability declared */
-	return (BHND_NVRAM_SRC_UNKNOWN);
+	return (0);
 }
 
 static int
@@ -806,8 +796,10 @@ chipc_alloc_resource(device_t dev, device_t child, int type,
 		
 		if (rle->res != NULL) {
 			device_printf(dev,
-			    "resource entry %#x type %d for child %s is busy\n",
-			    *rid, type, device_get_nameunit(child));
+			    "resource entry %#x type %d for child %s is busy "
+			    "[%d]\n",
+			    *rid, type, device_get_nameunit(child),
+			    rman_get_flags(rle->res));
 			
 			return (NULL);
 		}
@@ -827,10 +819,8 @@ chipc_alloc_resource(device_t dev, device_t child, int type,
 	}
 
 	/* Try to retain a region reference */
-	if ((error = chipc_retain_region(sc, cr, RF_ALLOCATED))) {
-		CHIPC_UNLOCK(sc);
+	if ((error = chipc_retain_region(sc, cr, RF_ALLOCATED)))
 		return (NULL);
-	}
 
 	/* Make our rman reservation */
 	rv = rman_reserve_resource(rm, start, end, count, flags & ~RF_ACTIVE,
@@ -873,10 +863,11 @@ static int
 chipc_release_resource(device_t dev, device_t child, int type, int rid,
     struct resource *r)
 {
-	struct chipc_softc	*sc;
-	struct chipc_region	*cr;
-	struct rman		*rm;
-	int			 error;
+	struct chipc_softc		*sc;
+	struct chipc_region		*cr;
+	struct rman			*rm;
+	struct resource_list_entry	*rle;
+	int			 	 error;
 
 	sc = device_get_softc(dev);
 
@@ -904,6 +895,11 @@ chipc_release_resource(device_t dev, device_t child, int type, int rid,
 
 	/* Drop allocation reference */
 	chipc_release_region(sc, cr, RF_ALLOCATED);
+
+	/* Clear reference from the resource list entry if exists */
+	rle = resource_list_find(BUS_GET_RESOURCE_LIST(dev, child), type, rid);
+	if (rle != NULL)
+		rle->res = NULL;
 
 	return (0);
 }
@@ -1266,13 +1262,6 @@ finished:
 	CHIPC_UNLOCK(sc);
 }
 
-static bhnd_nvram_src_t
-chipc_nvram_src(device_t dev)
-{
-	struct chipc_softc *sc = device_get_softc(dev);
-	return (sc->nvram_src);
-}
-
 static void
 chipc_write_chipctrl(device_t dev, uint32_t value, uint32_t mask)
 {
@@ -1336,7 +1325,6 @@ static device_method_t chipc_methods[] = {
 	DEVMETHOD(bhnd_bus_activate_resource,	chipc_activate_bhnd_resource),
 
 	/* ChipCommon interface */
-	DEVMETHOD(bhnd_chipc_nvram_src,		chipc_nvram_src),
 	DEVMETHOD(bhnd_chipc_write_chipctrl,	chipc_write_chipctrl),
 	DEVMETHOD(bhnd_chipc_enable_sprom,	chipc_enable_sprom_pins),
 	DEVMETHOD(bhnd_chipc_disable_sprom,	chipc_disable_sprom_pins),
@@ -1346,6 +1334,7 @@ static device_method_t chipc_methods[] = {
 };
 
 DEFINE_CLASS_0(bhnd_chipc, chipc_driver, chipc_methods, sizeof(struct chipc_softc));
-DRIVER_MODULE(bhnd_chipc, bhnd, chipc_driver, bhnd_chipc_devclass, 0, 0);
+EARLY_DRIVER_MODULE(bhnd_chipc, bhnd, chipc_driver, bhnd_chipc_devclass, 0, 0,
+    BUS_PASS_BUS + BUS_PASS_ORDER_MIDDLE);
 MODULE_DEPEND(bhnd_chipc, bhnd, 1, 1, 1);
 MODULE_VERSION(bhnd_chipc, 1);
