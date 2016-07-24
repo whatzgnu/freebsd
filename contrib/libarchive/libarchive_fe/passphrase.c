@@ -131,6 +131,10 @@ readpassphrase(const char *prompt, char *buf, size_t bufsiz, int flags)
 #include <string.h>
 #include <unistd.h>
 
+#ifndef _PATH_TTY
+#define _PATH_TTY "/dev/tty"
+#endif
+
 #ifdef TCSASOFT
 # define _T_FLUSH	(TCSAFLUSH|TCSASOFT)
 #else

@@ -1505,6 +1505,7 @@ meta_compat_parent(void)
     while (fgets(buf, sizeof(buf), fp)) {
 	meta_job_output(NULL, buf, "");
 	printf("%s", buf);
+	(void)fflush(stdout);
     }
     fclose(fp);
 }

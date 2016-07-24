@@ -59,15 +59,19 @@ static MALLOC_DEFINE(M_CAMSCHED, "CAM I/O Scheduler",
  * Default I/O scheduler for FreeBSD. This implementation is just a thin-vineer
  * over the bioq_* interface, with notions of separate calls for normal I/O and
  * for trims.
+ *
+ * When CAM_IOSCHED_DYNAMIC is defined, the scheduler is enhanced to dynamically
+ * steer the rate of one type of traffic to help other types of traffic (eg
+ * limit writes when read latency deteriorates on SSDs).
  */
 
 #ifdef CAM_NETFLIX_IOSCHED
 
-static int do_netflix_iosched = 1;
-TUNABLE_INT("kern.cam.do_netflix_iosched", &do_netflix_iosched);
-SYSCTL_INT(_kern_cam, OID_AUTO, do_netflix_iosched, CTLFLAG_RD,
-    &do_netflix_iosched, 1,
-    "Enable Netflix I/O scheduler optimizations.");
+static int do_dynamic_iosched = 1;
+TUNABLE_INT("kern.cam.do_dynamic_iosched", &do_dynamic_iosched);
+SYSCTL_INT(_kern_cam, OID_AUTO, do_dynamic_iosched, CTLFLAG_RD,
+    &do_dynamic_iosched, 1,
+    "Enable Dynamic I/O scheduler optimizations.");
 
 static int alpha_bits = 9;
 TUNABLE_INT("kern.cam.iosched_alpha_bits", &alpha_bits);
@@ -639,8 +643,8 @@ cam_iosched_has_flagged_work(struct cam_iosched_softc *isc)
 static inline int
 cam_iosched_has_io(struct cam_iosched_softc *isc)
 {
-#ifdef CAM_NETFLIX_IOSCHED
-	if (do_netflix_iosched) {
+#ifdef CAM_IOSCHED_DYNAMIC
+	if (do_dynamic_iosched) {
 		struct bio *rbp = bioq_first(&isc->bio_queue);
 		struct bio *wbp = bioq_first(&isc->write_queue);
 		int can_write = wbp != NULL &&
@@ -953,8 +957,8 @@ cam_iosched_init(struct cam_iosched_softc **iscp, struct cam_periph *periph)
 	(*iscp)->sort_io_queue = -1;
 	bioq_init(&(*iscp)->bio_queue);
 	bioq_init(&(*iscp)->trim_queue);
-#ifdef CAM_NETFLIX_IOSCHED
-	if (do_netflix_iosched) {
+#ifdef CAM_IOSCHED_DYNAMIC
+	if (do_dynamic_iosched) {
 		bioq_init(&(*iscp)->write_queue);
 		(*iscp)->read_bias = 100;
 		(*iscp)->current_read_bias = 100;
@@ -1018,8 +1022,8 @@ void cam_iosched_sysctl_init(struct cam_iosched_softc *isc,
 		&isc->sort_io_queue, 0,
 		"Sort IO queue to try and optimise disk access patterns");
 
-#ifdef CAM_NETFLIX_IOSCHED
-	if (!do_netflix_iosched)
+#ifdef CAM_IOSCHED_DYNAMIC
+	if (!do_dynamic_iosched)
 		return;
 
 	isc->sysctl_tree = SYSCTL_ADD_NODE(&isc->sysctl_ctx,
@@ -1060,8 +1064,8 @@ cam_iosched_flush(struct cam_iosched_softc *isc, struct devstat *stp, int err)
 {
 	bioq_flush(&isc->bio_queue, stp, err);
 	bioq_flush(&isc->trim_queue, stp, err);
-#ifdef CAM_NETFLIX_IOSCHED
-	if (do_netflix_iosched)
+#ifdef CAM_IOSCHED_DYNAMIC
+	if (do_dynamic_iosched)
 		bioq_flush(&isc->write_queue, stp, err);
 #endif
 }
@@ -1206,7 +1210,7 @@ cam_iosched_next_bio(struct cam_iosched_softc *isc)
 	 * See if we have any pending writes, and room in the queue for them,
 	 * and if so, those are next.
 	 */
-	if (do_netflix_iosched) {
+	if (do_dynamic_iosched) {
 		if ((bp = cam_iosched_get_write(isc)) != NULL)
 			return bp;
 	}
@@ -1223,15 +1227,14 @@ cam_iosched_next_bio(struct cam_iosched_softc *isc)
 	 * For the netflix scheduler, bio_queue is only for reads, so enforce
 	 * the limits here. Enforce only for reads.
 	 */
-	if (do_netflix_iosched) {
+	if (do_dynamic_iosched) {
 		if (bp->bio_cmd == BIO_READ &&
 		    cam_iosched_limiter_iop(&isc->read_stats, bp) != 0)
 			return NULL;
 	}
 #endif
 	bioq_remove(&isc->bio_queue, bp);
-#ifdef CAM_NETFLIX_IOSCHED
-	if (do_netflix_iosched) {
+	if (do_dynamic_iosched) {
 		if (bp->bio_cmd == BIO_READ) {
 			isc->read_stats.queued--;
 			isc->read_stats.total++;
@@ -1267,8 +1270,8 @@ cam_iosched_queue_work(struct cam_iosched_softc *isc, struct bio *bp)
 		isc->trim_stats.queued++;
 #endif
 	}
-#ifdef CAM_NETFLIX_IOSCHED
-	else if (do_netflix_iosched &&
+#ifdef CAM_IOSCHED_DYNAMIC
+	else if (do_dynamic_iosched &&
 	    (bp->bio_cmd == BIO_WRITE || bp->bio_cmd == BIO_FLUSH)) {
 		if (cam_iosched_sort_queue(isc))
 			bioq_disksort(&isc->write_queue, bp);
@@ -1331,8 +1334,8 @@ cam_iosched_bio_complete(struct cam_iosched_softc *isc, struct bio *bp,
     union ccb *done_ccb)
 {
 	int retval = 0;
-#ifdef CAM_NETFLIX_IOSCHED
-	if (!do_netflix_iosched)
+#ifdef CAM_IOSCHED_DYNAMIC
+	if (!do_dynamic_iosched)
 		return retval;
 
 	if (iosched_debug > 10)

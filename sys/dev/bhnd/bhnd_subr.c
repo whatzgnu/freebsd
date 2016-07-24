@@ -1158,3 +1158,4 @@ bhnd_bus_generic_deactivate_resource(device_t dev, device_t child,
 
 	return (EINVAL);
 };
+
