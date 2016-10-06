@@ -86,7 +86,7 @@ static u_char mouse_pointer[16] = {
 #define	BCMFB_FONT_WIDTH	8
 #define	FB_WIDTH		640
 #define	FB_HEIGHT		480
-#define	FB_DEPTH		32
+#define	FB_DEPTH		24
 
 struct bcmsc_softc {
 	/* Videoadpater part */
