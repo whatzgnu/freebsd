@@ -56,7 +56,7 @@ __FBSDID("$FreeBSD$");
 #include "fb_if.h"
 #include "mbox_if.h"
 
-#define	FB_DEPTH		32
+#define	FB_DEPTH		16
 
 struct bcmsc_softc {
 	struct fb_info 			info;
