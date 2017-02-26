@@ -389,6 +389,8 @@
  */
 # define SSL_MAX_DIGEST 6
 
+# define MAX_WARN_ALERT_COUNT    5
+
 # define TLS1_PRF_DGST_MASK      (0xff << TLS1_PRF_DGST_SHIFT)
 
 # define TLS1_PRF_DGST_SHIFT 10
@@ -1025,7 +1027,8 @@ int dtls1_retransmit_message(SSL *s, unsigned short seq,
                              unsigned long frag_off, int *found);
 int dtls1_get_queue_priority(unsigned short seq, int is_ccs);
 int dtls1_retransmit_buffered_messages(SSL *s);
-void dtls1_clear_record_buffer(SSL *s);
+void dtls1_clear_received_buffer(SSL *s);
+void dtls1_clear_sent_buffer(SSL *s);
 void dtls1_get_message_header(unsigned char *data,
                               struct hm_header_st *msg_hdr);
 void dtls1_get_ccs_header(unsigned char *data, struct ccs_header_st *ccs_hdr);
