@@ -16,6 +16,81 @@ from older versions of FreeBSD, try WITHOUT_CLANG to bootstrap to the tip of
 stable/10, and then rebuild without this option. The bootstrap process from
 older version of current is a bit fragile.
 
+20170223	p17	FreeBSD-SA-17:02.openssl
+
+	Fix OpenSSL RC4_MD5 cipher vulnerability.
+
+20170111	p16	FreeBSD-SA-17:01.openssh
+
+	Fix multiple vulnerabilities of OpenSSH.
+
+20161222	p15	FreeBSD-SA-16:39.ntp
+
+	Fix multiple vulnerabilities of ntp.
+
+20161208	p14	FreeBSD-SA-16:37.libc [revised]
+
+	Fix regressions introduced by SA-16:37.libc.
+
+20161206	p13	FreeBSD-SA-16:36.telnetd
+			FreeBSD-SA-16:37.libc
+			FreeBSD-SA-16:38.bhyve
+			FreeBSD-EN-16:19.tzcode
+			FreeBSD-EN-16:20.tzdata
+
+	Fix possible login(1) argument injection in telnetd(8). [SA-16:36]
+	Fix link_ntoa(3) buffer overflow in libc. [SA-16:37]
+	Fix possible escape from bhyve(8) virtual machine. [SA-16:38]
+	Fix warnings about valid time zone abbreviations. [EN-16:19]
+	Update timezone database information. [EN-16:20]
+
+20161102	p12	FreeBSD-SA-16:33.openssh
+			FreeBSD-SA-16:35.openssl
+
+	Fix OpenSSH remote Denial of Service vulnerability. [SA-16:33]
+
+	Fix OpenSSL remote DoS vulnerability. [SA-16:35]
+
+20161025	p11	FreeBSD-SA-16:15.sysarch [revised]
+			FreeBSD-EN-16:17.vm
+
+	Fix incorrect argument validation in sysarch(2). [SA-16:15]
+	Fix virtual memory subsystem bugs. [EN-16:17]
+
+20161010	p10	FreeBSD-SA-16:29.bspatch
+			FreeBSD-SA-16:30.portsnap
+			FreeBSD-SA-16:31.libarchive
+
+	Fix bspatch heap overflow vulnerability. [SA-16:29]
+
+	Fix multiple portsnap vulnerabilities. [SA-16:30]
+
+	Fix multiple libarchive vulnerabilities. [SA-16:31]
+
+20160926	p9	FreeBSD-SA-16:26.openssl [revised]
+
+	Fix OpenSSL regression introduced in SA-16:26.
+
+20160923	p8	FreeBSD-SA-16:26.openssl
+
+	Fix multiple OpenSSL vulnerabilitites.
+
+20160811	p7	FreeBSD-EN-16:10.dhclient
+			FreeBSD-EN-16:11.vmbus
+			FreeBSD-EN-16:12.hv_storvsc
+			FreeBSD-EN-16:13.vmbus
+			FreeBSD-EN-16:14.hv_storvsc
+			FreeBSD-EN-16:15.vmbus
+			FreeBSD-EN-16:16.hv_storvsc
+
+	Fix handling of unknown options from a DHCP server. [EN-16:10]
+	Fix a panic in hv_vmbus(4). [EN-16:11]
+	Fix missing hotplugged disk in hv_storvsc(4). [EN-16:12]
+	Fix the timecounter emulation in hv_vmbus(4). [EN-16:13]
+	Fix callout(9) handling in hv_storvsc(4). [EN-16:14]
+	Fix memory allocation issues in hv_vmbus(4). [EN-16:15]
+	Fix SCSI command handling in hv_storvsc(4). [EN-16:16]
+
 20160725	p6	FreeBSD-SA-16:25.bspatch
 			FreeBSD-EN-16:09.freebsd-update
 
